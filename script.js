@@ -71,7 +71,7 @@ function processCommand(command) {
                 <div>Music Productions:</div>
                 <div>Check out my music on various platforms:</div>
                 <div>- YouTube: <a href="https://www.youtube.com/@lynthrax" target="_blank" rel="noopener noreferrer">@lynthrax</a></div>
-                <div>- BeatStars: <a href="https://www.beatstars.com/your-beatstars-username" target="_blank" rel="noopener noreferrer">My BeatStars Profile</a></div>
+                <div>- BeatStars: <a href="https://www.beatstars.com/kazibaubeat" target="_blank" rel="noopener noreferrer">My BeatStars Profile</a></div>
                 `;
             break;
         case 'contact':
