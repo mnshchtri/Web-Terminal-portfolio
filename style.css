@@ -1,0 +1,71 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: 'Courier New', monospace;
+    background-color: #2b2b2b;
+    color: #e0e0e0;
+}
+
+
+#terminal {
+    height: 100%;
+    padding: 20px;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+#output pre {
+    font-family: monospace;
+    size: 800px;
+    white-space: pre;
+    margin: 0;
+    padding: 0;
+    color: #4CAF50; /* Green color for the ASCII art */
+}
+
+#output {
+    margin-bottom: 20px;
+}
+
+#output a {
+    color: #4CAF50; /* Green color for links */
+    text-decoration: none;
+    border-bottom: 1px dashed #4CAF50;
+}
+
+#output a:hover {
+    color: #45a049; /* Slightly darker green on hover */
+    border-bottom: 1px solid #45a049;
+}
+
+#input-line {
+    display: flex;
+    align-items: center;
+}
+
+#prompt {
+    margin-right: 10px;
+    color: #ffcc00; /* Yellowish color for the prompt */
+    font-weight: bold;
+}
+
+#user-input {
+    flex-grow: 1;
+    background-color: transparent;
+    border: none;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    outline: none;
+}
+
+/* Style for command outputs */
+#output div {
+    margin-bottom: 5px;
+}
+
+/* Style for user commands */
+#output div:nth-child(odd) {
+    color: #4CAF50; /* Green color for user commands */
+}
