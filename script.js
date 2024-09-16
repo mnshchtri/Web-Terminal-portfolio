@@ -58,14 +58,10 @@ function processCommand(command) {
             output.innerHTML += `
                 <div>Projects:</div>
                 <div>1. Terminal Portfolio: This website!</div>
-<<<<<<< HEAD
                 <div>2. Land Renting System (Terminal Based): Custom-built Land Renting System</div>
                 <div>3. DEVANAGARI CHARACTER READER: The project develops a system that assists visually 
-                impaired individuals in reading printed Nepali documents by using a camera for text capture, a Convolutional Neural Network (CNN) for text recognition, and a Text-to-Speech (TTS) engine for audio output.</div>
-=======
-                <div>2. Linux Audio Workstation: Custom-built DAW using open-source tools</div>
+                        impaired individuals in reading printed Nepali documents by using a camera for text capture, a Convolutional Neural Network (CNN) for text recognition, and a Text-to-Speech (TTS) engine for audio output.</div>
                 <div>3. Network Monitoring Tool: Python-based application for real-time network analysis</div>
->>>>>>> origin/main
                 <div>4. Automated Music Visualizer: Generates visuals based on audio input</div>
                 <div>5. Personal Cloud Server: Self-hosted solution for file storage and media streaming</div>
             `;
