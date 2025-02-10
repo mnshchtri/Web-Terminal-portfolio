@@ -45,10 +45,10 @@ function processCommand(command) {
         case 'skills':
             output.innerHTML += `
                 <div>Technical Skills:</div>
-                <div>- Operating Systems: Linux (advanced), Windows</div>
+                <div>- Operating Systems: Linux (advanced), mac, Embedded OS</div>
                 <div>- Programming: Python, JavaScript, Bash scripting</div>
                 <div>- Web Technologies: HTML, CSS, React</div>
-                <div>- DevOps: Git, Docker, CI/CD pipelines</div>
+                <div>- DevOps: Git, Docker, CI/CD pipelines, jenkins, Ansible</div>
                 <div>- Security: Network security, Ethical hacking basics</div>
                 <div>- Music Production: DAWs, Audio engineering, MIDI</div>
                 <div>- Networking: TCP/IP, DNS, Firewalls</div>
@@ -59,11 +59,11 @@ function processCommand(command) {
                 <div>Projects:</div>
                 <div>1. Terminal Portfolio: This website!</div>
                 <div>2. Land Renting System (Terminal Based): Custom-built Land Renting System</div>
-                <div>3. DEVANAGARI CHARACTER READER: The project develops a system that assists visually 
+                <div>3. DEVANAGARI CHARACTER READER: Develops a system that assists visually 
                         impaired individuals in reading printed Nepali documents by using a camera for text capture, a Convolutional Neural Network (CNN) for text recognition, and a Text-to-Speech (TTS) engine for audio output.</div>
                 <div>3. Network Monitoring Tool: Python-based application for real-time network analysis</div>
-                <div>4. Automated Music Visualizer: Generates visuals based on audio input</div>
-                <div>5. Personal Cloud Server: Self-hosted solution for file storage and media streaming</div>
+                <div>4. Automated Recon tools: Generates the automation process of Security assessments</div>
+                
             `;
             break;
         case 'music':
@@ -96,8 +96,10 @@ function processCommand(command) {
             // Clear the output, then add back the original content
             output.innerHTML = originalContent;
             break;
-        
-    
+
+        case 'ls':
+            output.innerHTML += `<div>this is not the fucking linux system dumb</div>`;
+            break;
 
         default:
             output.innerHTML += `<div>Command not found. Type 'help' for available commands.</div>`;
