@@ -97,7 +97,7 @@ It's a real-feeling Linux box, so poke at it:
 It's a desktop too (Alt stands in for Super):
   Alt+Enter terminal · Alt+B Chromium · Alt+E Files · Alt+M Neox Music
   Alt+Shift+N VS Code (this site's own source) · Alt+Shift+O Obsidian (my notes)
-  Alt+G Neox Arcade: Packet Snake, Firewall, Riff Runner, Night Shift · bruteforce
+  Alt+G Neox Arcade: 7 original games (try fretwork or night-shift) · bruteforce
   Alt+Space launcher · Alt+F fullscreen · Alt+Shift+Space backgrounds · Alt+Ctrl+Space next one
   wallpaper list · chromium wiki.archlinux.org · nautilus ~/projects
 

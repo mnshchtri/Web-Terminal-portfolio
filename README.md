@@ -14,7 +14,7 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `style.css` — layout and the colour themes (`win-palette` is my current Omarchy theme).
 - `gui.js` — graphical apps: Chromium, Files, Text Editor, Image Viewer (imv), Neox Music, and the background switcher.
 - `vscode.js` — VS Code: explorer, tabs, syntax highlighting, search, source control with live commits, quick open (Ctrl+P) and an integrated `nsh` terminal (Ctrl+\`). Opens this site's own source in `~/code/Web-Terminal-portfolio`.
-- `games.js` — Neox Arcade, four original retro games on a pixel canvas (Packet Snake, Firewall, Riff Runner, and Night Shift — build by day, defend the datacenter by night) with chiptune sound and saved high scores, plus `bruteforce`, a code-breaking game for the terminal.
+- `games.js` — Neox Arcade, seven original retro games on a pixel canvas: Packet Snake, Firewall (shooter), Riff Runner (runner), Night Shift (build by day, defend by night), Patch Panel (cable puzzle), Drone Drop (lander) and Fretwork (rhythm, with a backing band synthesised live) with chiptune sound and saved high scores, plus `bruteforce`, a code-breaking game for the terminal.
 - `obsidian.js` — Obsidian with the public **Neox Vault** (`~/Documents/Neox Vault`): wikilinks, backlinks, tags, search and the graph view. The notes are written in this file.
 - `assets/` — `wallpapers/` (the 31 backgrounds from my Omarchy themes, plus thumbnails) and `wallpaper.jpg` (terminal background).
 
