@@ -3,31 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manish Karki (Neox) | Terminal Portfolio | Modified</title>
+    <title>visitor@neox: ~ | Manish Karki (Neox)</title>
+    <meta name="description" content="Manish Karki (Neox) — DevSecOps Engineer & offensive security. A Linux terminal portfolio: ls, cd, cat your way around.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="terminal">
-        <div id="output">
-            <pre>
- ███▄    █ ▓█████  ▒█████  ▒██   ██▒
- ██ ▀█   █ ▓█   ▀ ▒██▒  ██▒▒▒ █ █ ▒░
-▓██  ▀█ ██▒▒███   ▒██░  ██▒░░  █   ░
-▓██▒  ▐▌██▒▒▓█  ▄ ▒██   ██░ ░ █ █ ▒ 
-▒██░   ▓██░░▒████▒░ ████▓▒░▒██▒ ▒██▒
-░ ▒░   ▒ ▒ ░░ ▒░ ░░ ▒░▒░▒░ ▒▒ ░ ░▓ ░
-░ ░░   ░ ▒░ ░ ░  ░  ░ ▒ ▒░ ░░   ░▒ ░
-   ░   ░ ░    ░   ░ ░ ░ ▒   ░    ░  
-         ░    ░  ░    ░ ░   ░    ░  
-            </pre>
-            Welcome to Manish Karki's (Neox) terminal portfolio. Type 'help' for available commands.
+    <main id="terminal">
+        <div id="output" aria-live="polite"></div>
+        <div id="input-line" hidden>
+            <span id="prompt"></span>
+            <input type="text" id="user-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Terminal input">
         </div>
-        <div id="input-line">
-            <span id="prompt">visitor@neox-portfolio:~$</span>
-            <input type="text" id="user-input" autofocus>
-        </div>
-    </div>
+        <noscript>NeoxOS needs JavaScript to boot. Try: https://github.com/mnshchtri</noscript>
+    </main>
 
+    <script src="fs.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

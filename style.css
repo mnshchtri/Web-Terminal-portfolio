@@ -1,71 +1,114 @@
-body, html {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    font-family: 'Courier New', monospace;
-    background-color: #2b2b2b;
-    color: #e0e0e0;
+/* Tokyo Night-ish tty palette */
+:root {
+    --bg: #1a1b26;
+    --fg: #c0caf5;
+    --dim: #565f89;
+    --green: #9ece6a;
+    --blue: #7aa2f7;
+    --cyan: #7dcfff;
+    --magenta: #bb9af7;
+    --yellow: #e0af68;
+    --red: #f7768e;
+    --font: 'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace;
 }
 
+html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.45 var(--font);
+    font-variant-ligatures: none;
+}
+
+::selection {
+    background: #33467c;
+}
 
 #terminal {
     height: 100%;
-    padding: 20px;
+    padding: 12px 16px;
     overflow-y: auto;
     box-sizing: border-box;
+    cursor: text;
 }
 
-#output pre {
-    font-family: monospace;
-    size: 800px;
-    white-space: pre;
-    margin: 0;
-    padding: 0;
-    color: #4CAF50; /* Green color for the ASCII art */
-}
-
-#output {
-    margin-bottom: 20px;
-}
-
-#output a {
-    color: #4CAF50; /* Green color for links */
-    text-decoration: none;
-    border-bottom: 1px dashed #4CAF50;
-}
-
-#output a:hover {
-    color: #45a049; /* Slightly darker green on hover */
-    border-bottom: 1px solid #45a049;
+.line {
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 1.45em;
 }
 
 #input-line {
     display: flex;
-    align-items: center;
+    white-space: pre;
 }
 
-#prompt {
-    margin-right: 10px;
-    color: #ffcc00; /* Yellowish color for the prompt */
-    font-weight: bold;
+#input-line[hidden] {
+    display: none;
 }
 
 #user-input {
-    flex-grow: 1;
-    background-color: transparent;
+    flex: 1;
+    min-width: 0;
+    padding: 0;
     border: none;
-    color: #e0e0e0;
-    font-family: 'Courier New', monospace;
-    font-size: 16px;
     outline: none;
+    background: transparent;
+    color: var(--fg);
+    font: inherit;
+    caret-color: var(--fg);
+    caret-shape: block;
 }
 
-/* Style for command outputs */
-#output div {
-    margin-bottom: 5px;
+/* Prompt and file-type colours */
+.u { color: var(--green); font-weight: 700; }
+.p { color: var(--blue); font-weight: 700; }
+.dir { color: var(--blue); font-weight: 700; }
+.lnk { color: var(--cyan); }
+.exe { color: var(--green); font-weight: 700; }
+.err { color: var(--red); }
+.ok { color: var(--green); }
+.dim { color: var(--dim); }
+.y { color: var(--yellow); }
+.hl { color: var(--magenta); font-weight: 700; }
+.match { color: var(--red); font-weight: 700; }
+.banner { color: var(--green); }
+
+a {
+    color: var(--cyan);
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
 }
 
-/* Style for user commands */
-#output div:nth-child(odd) {
-    color: #4CAF50; /* Green color for user commands */
+a:hover {
+    text-decoration-style: solid;
+}
+
+.ls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(24ch, max-content));
+    column-gap: 2ch;
+}
+
+.neofetch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 3ch;
+}
+
+.neofetch pre {
+    margin: 0;
+    font: inherit;
+}
+
+.neofetch .logo {
+    color: var(--cyan);
+    font-weight: 700;
+}
+
+@media (max-width: 600px) {
+    html, body { font-size: 13px; }
+    #user-input { font-size: 16px; } /* stops iOS zooming on focus */
+    .neofetch .logo { display: none; }
 }
