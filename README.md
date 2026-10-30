@@ -13,6 +13,8 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `desktop.js` — the desktop: dwindle tiling window manager, workspaces 1–9, top bar, launcher, notifications, screensaver, `hyprctl`/`ghostty`/`notify-send`.
 - `style.css` — layout and the colour themes (`win-palette` is my current Omarchy theme).
 - `gui.js` — graphical apps: Chromium, Files, Text Editor, Image Viewer (imv), Neox Music, and the background switcher.
+- `vscode.js` — VS Code: explorer, tabs, syntax highlighting, search, source control with live commits, quick open (Ctrl+P) and an integrated `nsh` terminal (Ctrl+\`). Opens this site's own source in `~/code/Web-Terminal-portfolio`.
+- `obsidian.js` — Obsidian with the public **Neox Vault** (`~/Documents/Neox Vault`): wikilinks, backlinks, tags, search and the graph view. The notes are written in this file.
 - `assets/` — `wallpapers/` (the 31 backgrounds from my Omarchy themes, plus thumbnails) and `wallpaper.jpg` (terminal background).
 
 ## Keybindings
@@ -23,6 +25,7 @@ Alt stands in for Super, which the OS or browser keeps for itself.
 | Alt+Enter | New terminal |
 | Alt+Space | Launcher (or click the logo) |
 | Alt+B / Alt+E / Alt+M | Chromium / Files / Neox Music |
+| Alt+Shift+N / Alt+Shift+O | VS Code / Obsidian |
 | Alt+Shift+Space | Background switcher (or the image icon in the bar) |
 | Alt+Ctrl+Space | Next background |
 | Alt+W | Close window (or `exit`) |

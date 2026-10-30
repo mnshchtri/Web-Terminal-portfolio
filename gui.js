@@ -518,7 +518,7 @@ function imageApp(abs) {
             show();
         },
         focus() {
-            win.el.focus();
+            win.el.focus({ preventScroll: true });
         },
     };
 }

@@ -96,6 +96,7 @@ It's a real-feeling Linux box, so poke at it:
 
 It's a desktop too (Alt stands in for Super):
   Alt+Enter terminal · Alt+B Chromium · Alt+E Files · Alt+M Neox Music
+  Alt+Shift+N VS Code (this site's own source) · Alt+Shift+O Obsidian (my notes)
   Alt+Space launcher · Alt+Shift+Space backgrounds · Alt+Ctrl+Space next one
   wallpaper list · chromium wiki.archlinux.org · nautilus ~/projects
 

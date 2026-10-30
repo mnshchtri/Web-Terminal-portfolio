@@ -223,8 +223,13 @@ window.addEventListener('resize', layout);
 function afterCommand(session) {
     if (session.exited) {
         const win = wm.windows.find((w) => w.shell?.session === session);
-        if (win) closeWindow(win);
+        // A shell embedded in an app (VS Code's terminal panel) closes just the panel.
+        if (win?.app?.shellExited) win.app.shellExited();
+        else if (win) closeWindow(win);
     }
+    // Shells inside apps shouldn't leave their prompt as the app's window title.
+    const host = wm.windows.find((w) => w.app && w.shell?.session === session);
+    if (host) refreshTitle(host);
     wm.deferred.splice(0).forEach((job) => job());
 }
 
@@ -352,7 +357,7 @@ function runInTerminal(cmd) {
     if (shared.booting) return;
     if (focusedBusy()) return flashBusy();
     // Bar commands type into the focused terminal; with a GUI app focused they get a fresh one.
-    if (wm.focused?.shell && wm.focused.ws === wm.active) runIn(wm.focused, cmd);
+    if (wm.focused?.shell && !wm.focused.app && wm.focused.ws === wm.active) runIn(wm.focused, cmd);
     else openTerminal({ run: cmd });
 }
 
