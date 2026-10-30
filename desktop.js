@@ -21,11 +21,12 @@ const IDLE_MS = 150000; // screensaver timeout from neox's shell.json
 const wm = { windows: [], active: 1, focused: null, nextId: 1, lastFocused: {}, deferred: [] };
 
 const isMobile = () => matchMedia('(max-width: 700px)').matches;
-const focusedBusy = () => !!wm.focused?.shell.session.busy;
+const focusedBusy = () => !!wm.focused?.shell?.session.busy;
 
 // ---------- window manager ----------
 
 function windowTitle(win) {
+    if (win.app) return win.app.title();
     const s = win.shell.session;
     const home = USERS[s.user].home;
     const cwd = s.cwd === home ? '~' : s.cwd.startsWith(home + '/') ? '~' + s.cwd.slice(home.length) : s.cwd;
@@ -40,25 +41,48 @@ function flashBusy() {
     notify('Terminal busy', 'Finish the running command first: Ctrl+C, or q in full-screen apps.');
 }
 
-// Opening from inside a running command (ghostty, hyprctl dispatch) defers focus until it finishes.
-function openTerminal({ run, fromCommand } = {}) {
-    if (!fromCommand && focusedBusy()) return flashBusy();
-    const el = document.createElement('div');
-    el.className = 'win opening';
-    desktopEl.appendChild(el);
-    const win = { id: wm.nextId++, ws: wm.active, el, shell: createShell(el), full: false };
-    el.addEventListener('mousedown', () => focusWindow(win), true);
+// Inserts a window next to the focused one. Opening from inside a running command (ghostty,
+// chromium, hyprctl dispatch) defers focus until that command finishes.
+function addWindow(win, activate, fromCommand) {
+    win.el.addEventListener('mousedown', () => focusWindow(win), true);
     const at = wm.focused?.ws === wm.active ? wm.windows.indexOf(wm.focused) + 1 : wm.windows.length;
     wm.windows.splice(at, 0, win);
-    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('opening')));
-    const activate = () => {
-        focusWindow(win);
-        if (run) runIn(win, run);
-    };
+    requestAnimationFrame(() => requestAnimationFrame(() => win.el.classList.remove('opening')));
     if (fromCommand && focusedBusy()) wm.deferred.push(activate);
     else activate();
     layout();
     return win;
+}
+
+function newWindowEl(extra = '') {
+    const el = document.createElement('div');
+    el.className = `win opening ${extra}`;
+    desktopEl.appendChild(el);
+    return el;
+}
+
+function openTerminal({ run, fromCommand } = {}) {
+    if (!fromCommand && focusedBusy()) return flashBusy();
+    const el = newWindowEl();
+    const win = { id: wm.nextId++, ws: wm.active, el, shell: createShell(el), full: false };
+    return addWindow(win, () => {
+        focusWindow(win);
+        if (run) runIn(win, run);
+    }, fromCommand);
+}
+
+// Graphical apps (gui.js) draw their own UI into the window and run as the guest user.
+// app: { cls, title(), mount(el, win), focus?(), cleanup?() }
+function openApp(app, { fromCommand } = {}) {
+    if (!fromCommand && focusedBusy()) return flashBusy();
+    const el = newWindowEl(`gui ${app.cls}`);
+    const win = { id: wm.nextId++, ws: wm.active, el, app, full: false };
+    app.mount(el, win);
+    return addWindow(win, () => focusWindow(win), fromCommand);
+}
+
+function refreshTitle(win) {
+    if (wm.focused === win) document.title = windowTitle(win);
 }
 
 function focusWindow(win) {
@@ -77,24 +101,31 @@ function focusWindow(win) {
     wm.active = win.ws;
     wm.lastFocused[win.ws] = win;
     win.el.classList.add('focused');
-    bindShell(win.shell);
-    if (!state.busy) {
-        updatePrompt();
-        setBusy(false);
+    if (win.app) {
+        bindShell(null);
+        document.title = windowTitle(win);
+        win.app.focus?.();
+    } else {
+        bindShell(win.shell);
+        if (!state.busy) {
+            updatePrompt();
+            setBusy(false);
+        }
+        setTitle();
     }
-    setTitle();
     layout();
     return true;
 }
 
 function runIn(win, cmd) {
-    if (wm.focused !== win || state.busy || state.app) return;
+    if (wm.focused !== win || !win.shell || state.busy || state.app) return;
     input.value = cmd;
     submit();
 }
 
 function closeWindow(win) {
-    if (win.shell.session.busy) return flashBusy();
+    if (win.shell?.session.busy) return flashBusy();
+    win.app?.cleanup?.();
     const siblings = wm.windows.filter((w) => w.ws === win.ws);
     const pos = siblings.indexOf(win);
     wm.windows.splice(wm.windows.indexOf(win), 1);
@@ -183,7 +214,7 @@ function layout() {
     desktopEl.classList.toggle('empty', !visible.length);
     renderWorkspaces();
     // Keep each terminal pinned to its newest output once the resize animation settles.
-    setTimeout(() => visible.forEach((w) => { w.shell.terminal.scrollTop = w.shell.terminal.scrollHeight; }), 220);
+    setTimeout(() => visible.forEach((w) => { if (w.shell) w.shell.terminal.scrollTop = w.shell.terminal.scrollHeight; }), 220);
 }
 
 window.addEventListener('resize', layout);
@@ -191,7 +222,7 @@ window.addEventListener('resize', layout);
 // Called by script.js after every command line.
 function afterCommand(session) {
     if (session.exited) {
-        const win = wm.windows.find((w) => w.shell.session === session);
+        const win = wm.windows.find((w) => w.shell?.session === session);
         if (win) closeWindow(win);
     }
     wm.deferred.splice(0).forEach((job) => job());
@@ -320,7 +351,8 @@ setInterval(updateWeather, 30 * 60 * 1000);
 function runInTerminal(cmd) {
     if (shared.booting) return;
     if (focusedBusy()) return flashBusy();
-    if (wm.focused?.ws === wm.active) runIn(wm.focused, cmd);
+    // Bar commands type into the focused terminal; with a GUI app focused they get a fresh one.
+    if (wm.focused?.shell && wm.focused.ws === wm.active) runIn(wm.focused, cmd);
     else openTerminal({ run: cmd });
 }
 
@@ -380,7 +412,8 @@ function openLauncher() {
 function closeLauncher() {
     launcherEl.hidden = true;
     launcherEl.innerHTML = '';
-    if (wm.focused && !state.app) input.focus();
+    if (wm.focused?.shell && !state.app) input.focus();
+    else wm.focused?.app?.focus?.();
 }
 
 function renderLauncher() {
@@ -517,7 +550,7 @@ window.addEventListener('keydown', (e) => {
     if (digit && e.shiftKey) moveToWorkspace(+digit);
     else if (digit) switchWorkspace(+digit);
     else if (e.key === 'Enter') openTerminal();
-    else if (e.code === 'Space') openLauncher();
+    else if (e.code === 'Space' && !e.shiftKey) openLauncher();
     else if (e.code === 'KeyW' || e.code === 'KeyQ') wm.focused && closeWindow(wm.focused);
     else if (e.code === 'KeyF') toggleFullscreen();
     else if (arrow) moveFocus(arrow);
@@ -538,7 +571,7 @@ function cmdHyprctl({ args }) {
     const describe = (w) => [
         `Window ${(0x55d1c0 + w.id).toString(16)} -> ${esc(windowTitle(w))}:`,
         `\tworkspace: ${w.ws} (${w.ws})`,
-        '\tclass: com.mitchellh.ghostty',
+        `\tclass: ${w.app ? w.app.cls : 'com.mitchellh.ghostty'}`,
         `\ttitle: ${esc(windowTitle(w))}`,
         `\tsize: ${Math.round(w.rect?.w || 0)},${Math.round(w.rect?.h || 0)}`,
         `\tfullscreen: ${w.full ? 2 : 0}`,

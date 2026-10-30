@@ -12,7 +12,8 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `sys.js` — system and network tools (`systemctl`, `journalctl`, `ping`, `curl`, `nmap`, `pacman`…), live GitHub (`gh`, `git clone`/`log`) and themes.
 - `desktop.js` — the desktop: dwindle tiling window manager, workspaces 1–9, top bar, launcher, notifications, screensaver, `hyprctl`/`ghostty`/`notify-send`.
 - `style.css` — layout and the colour themes (`win-palette` is my current Omarchy theme).
-- `assets/` — `desktop.jpg` (desktop wallpaper) and `wallpaper.jpg` (terminal background).
+- `gui.js` — graphical apps: Chromium, Files, Text Editor, Image Viewer (imv), Neox Music, and the background switcher.
+- `assets/` — `wallpapers/` (the 31 backgrounds from my Omarchy themes, plus thumbnails) and `wallpaper.jpg` (terminal background).
 
 ## Keybindings
 Alt stands in for Super, which the OS or browser keeps for itself.
@@ -21,6 +22,9 @@ Alt stands in for Super, which the OS or browser keeps for itself.
 | --- | --- |
 | Alt+Enter | New terminal |
 | Alt+Space | Launcher (or click the logo) |
+| Alt+B / Alt+E / Alt+M | Chromium / Files / Neox Music |
+| Alt+Shift+Space | Background switcher (or the image icon in the bar) |
+| Alt+Ctrl+Space | Next background |
 | Alt+W | Close window (or `exit`) |
 | Alt+F | Toggle fullscreen |
 | Alt+Arrows | Move focus |

@@ -94,6 +94,11 @@ It's a real-feeling Linux box, so poke at it:
   git clone https://github.com/mnshchtri/infra-eye   (real README, live)
   theme list · cmatrix · sl · fortune | cowsay | lolcat
 
+It's a desktop too (Alt stands in for Super):
+  Alt+Enter terminal · Alt+B Chromium · Alt+E Files · Alt+M Neox Music
+  Alt+Space launcher · Alt+Shift+Space backgrounds · Alt+Ctrl+Space next one
+  wallpaper list · chromium wiki.archlinux.org · nautilus ~/projects
+
 There's also a flag in /root. You start as a guest with no sudo. Get root.
   (stuck? run: hint)
 

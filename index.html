@@ -5,7 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>visitor@neox: ~ | Manish Karki (Neox)</title>
     <meta name="description" content="Manish Karki (Neox) — DevSecOps Engineer & offensive security. A Linux desktop portfolio: tile terminals, cat your way around, then try to get root.">
-    <script>document.documentElement.dataset.theme = localStorage.getItem('nsh_theme') || 'win-palette';</script>
+    <script>
+        document.documentElement.dataset.theme = localStorage.getItem('nsh_theme') || 'win-palette';
+        // Apply the saved background before first paint (gui.js validates names when switching).
+        {
+            const wall = localStorage.getItem('nsh_wallpaper');
+            if (/^[a-z0-9-]+$/.test(wall || '')) document.documentElement.style.setProperty('--desktop-wall', `url('assets/wallpapers/${wall}.webp')`);
+        }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
@@ -25,5 +32,6 @@
     <script src="apps.js"></script>
     <script src="sys.js"></script>
     <script src="desktop.js"></script>
+    <script src="gui.js"></script>
 </body>
 </html>
