@@ -181,11 +181,34 @@ function toggleFullscreen(mode = 'full') {
     layout();
 }
 
-// Browser fullscreen follows whether the active workspace shows a 'full' window. Requests can only
-// succeed during a key press or click, which is when layout() runs for these changes.
+// Browser fullscreen follows whether the active workspace shows a 'full' window. Browsers only allow
+// it during a user gesture, and Chromium (Chrome, Brave, Edge) doesn't count browser shortcuts like
+// ⌘F on macOS as one. When the request is refused, the next click or key press finishes the job.
+let fullscreenRetry = false;
+
 function syncBrowserFullscreen(wanted) {
-    if (wanted && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
-    else if (!wanted && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    if (!wanted) fullscreenRetry = false;
+    if (wanted && !document.fullscreenElement && !fullscreenRetry) {
+        document.documentElement.requestFullscreen?.()?.catch(() => {
+            fullscreenRetry = true;
+            notify('Click or press any key to hide the browser tabs',
+                /Mac/.test(navigator.platform) ? '⌘F is a browser shortcut, so it can’t do that alone. Option+F works in one step.' : 'The browser needs one more click or key press.', 6000);
+        });
+    } else if (!wanted && document.fullscreenElement) {
+        document.exitFullscreen?.()?.catch(() => {});
+    }
+}
+
+const wantsFullscreen = () => wm.windows.some((w) => w.ws === wm.active && w.full === 'full');
+
+for (const type of ['pointerdown', 'keydown']) {
+    window.addEventListener(type, (e) => {
+        if (!fullscreenRetry || document.fullscreenElement) return;
+        // Modifier keys and ⌘ shortcuts don't count as gestures either.
+        if (type === 'keydown' && (e.metaKey || ['Meta', 'Control', 'Alt', 'Shift', 'Escape'].includes(e.key))) return;
+        fullscreenRetry = false;
+        if (wantsFullscreen()) document.documentElement.requestFullscreen?.()?.catch(() => {});
+    }, true);
 }
 
 // Leaving browser fullscreen with Esc or F11 drops the window back into the tiling layout.
@@ -231,13 +254,13 @@ function layout() {
         w.el.classList.toggle('off', w.ws !== wm.active || (!!solo && w !== solo));
         w.el.classList.toggle('fs', w === solo && covering);
     }
-    // True fullscreen hides the bar, so measure the desktop again once it's gone.
+    // True fullscreen hides the bar, so the desktop is measured again after toggling it.
+    // Exactly one fullscreen request per change: a second one would be refused.
     if (document.body.classList.contains('fs-mode') !== covering) {
         document.body.classList.toggle('fs-mode', covering);
         syncBrowserFullscreen(covering);
         return layout();
     }
-    syncBrowserFullscreen(covering);
     if (solo) place(solo, { x: 0, y: 0, w: W, h: H });
     else dwindle(visible, { x: out, y: out, w: W - 2 * out, h: H - 2 * out }, mobile ? 0 : GAPS_IN * 2);
     desktopEl.classList.toggle('empty', !visible.length);

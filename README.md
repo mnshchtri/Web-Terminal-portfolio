@@ -31,7 +31,7 @@ Alt stands in for Super, which the OS or browser keeps for itself.
 | Alt+Shift+Space | Background switcher (or the image icon in the bar) |
 | Alt+Ctrl+Space | Next background |
 | Alt+W | Close window (or `exit`) |
-| Alt+F (or Super/⌘+F) | Fullscreen, like Omarchy's Super+F. Esc or Alt+F again to leave |
+| Alt+F (or Super/⌘+F) | Fullscreen, like Omarchy's Super+F. Esc or Alt+F again to leave. On macOS use Option+F: ⌘F is a browser shortcut, so Chrome/Brave need one extra click before they hide the tabs |
 | Alt+Shift+F | Full width: fills the screen but keeps the bar |
 | Alt+Arrows | Move focus |
 | Alt+1..9 | Switch workspace |
