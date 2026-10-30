@@ -222,6 +222,10 @@ button {
 
 #desktop.empty .empty-hint { display: grid; }
 
+/* Super+F / Alt+F: the window covers the whole screen, bar and gaps included. */
+body.fs-mode #bar { display: none; }
+.win.fs { border-width: 0; opacity: 1; }
+
 /* ---------- terminal ---------- */
 
 .term {

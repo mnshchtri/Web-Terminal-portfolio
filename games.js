@@ -97,6 +97,7 @@ function playSfx(name) {
 
 const PACKET_SNAKE = {
     id: 'snake',
+    cmd: 'packet-snake',
     name: 'Packet Snake',
     blurb: 'Route a packet through the network. Eat data, grab gold root shells, and dodge the firewalls that go up as you grow. Edges wrap.',
     controls: 'ARROWS / WASD  -  SWIPE ON TOUCH',
@@ -236,6 +237,7 @@ const FW_COLOR = { worm: PAL.green, trojan: PAL.magenta, frag: PAL.magenta, rans
 
 const FIREWALL = {
     id: 'firewall',
+    cmd: 'firewall',
     name: 'Firewall',
     blurb: 'Hold the line. Worms wriggle, trojans split when they break, ransomware drops locks. Grab patches for rapid fire. Anything that slips past is a breach.',
     controls: 'LEFT/RIGHT MOVE  -  SPACE FIRE  -  DRAG ON TOUCH',
@@ -423,6 +425,7 @@ const RR_OBS = { amp: { w: 10, h: 12 }, pedal: { w: 8, h: 5 }, stack: { w: 11, h
 
 const RIFF_RUNNER = {
     id: 'runner',
+    cmd: 'riff-runner',
     name: 'Riff Runner',
     blurb: 'Late for the gig. Run the fretboard under the Himalayas, jump the amps and pedals (double jump works), and catch notes for bonus points.',
     controls: 'SPACE / UP / TAP TO JUMP  -  TWICE TO DOUBLE JUMP',
@@ -547,7 +550,418 @@ const RIFF_RUNNER = {
     },
 };
 
-const GAMES = [PACKET_SNAKE, FIREWALL, RIFF_RUNNER];
+// ---------- Night Shift ----------
+
+// Build sites, mirrored on both sides of the mainframe at x = 0.
+const NS_SLOTS = [
+    { x: 28, kind: 'server' }, { x: 56, kind: 'server' }, { x: 92, kind: 'sentry' }, { x: 122, kind: 'wall' },
+    { x: 168, kind: 'sentry' }, { x: 200, kind: 'wall' }, { x: 250, kind: 'server' },
+];
+const NS_COST = { server: [3, 6], sentry: [6, 12], wall: [4, 8, 14] };
+const NS_LABEL = { server: 'SERVER', sentry: 'SENTRY', wall: 'FIREWALL' };
+const NS_WALL_HP = [0, 60, 130, 260];
+const NS_PLAYER = [
+    ['..hhh..', '.hhhhh.', '.hsssh.', '..sss..', '.hhhhh.', 'hhhhhhh', 'h.hhh.h', '..hhh..', '..d.d..', '..d.d..', '.dd.dd.', '.......'],
+    ['..hhh..', '.hhhhh.', '.hsssh.', '..sss..', '.hhhhh.', 'hhhhhhh', 'h.hhh.h', '..hhh..', '..dd...', '.d..d..', '.d..dd.', '.......'],
+];
+const NS_CRAWLER = [
+    ['.#####.', '##o#o##', '#######', '.#.#.#.', '#.#.#.#'],
+    ['.#####.', '##o#o##', '#######', '#.#.#.#', '.#.#.#.'],
+];
+const NS_BRUTE = ['..#####..', '.#######.', '##o###o##', '#########', '#.#####.#', '#########', '.##...##.', '##.....##'];
+
+const lerp = (a, b, t) => a + (b - a) * t;
+const mix = (c1, c2, t) => `rgb(${c1.map((v, i) => Math.round(lerp(v, c2[i], t))).join(',')})`;
+
+const NIGHT_SHIFT = {
+    id: 'nightshift',
+    cmd: 'night-shift',
+    name: 'Night Shift',
+    blurb: 'Keep an edge datacenter in the Himalayas alive. By day, collect credits and build servers, firewalls and sentries. By night, botnets come from both sides.',
+    controls: 'LEFT/RIGHT WALK  -  SPACE BUILD / ZAP',
+    create(api) {
+        const DAY = 1800;
+        const NIGHT = 1500;
+        const EDGE = 300;
+        const GROUND = 150;
+        const slots = NS_SLOTS.flatMap((s) => [-1, 1].map((side) => ({ ...s, x: s.x * side, tier: 0, hp: 0, timer: 0, cool: 0 })));
+        let px = 0;
+        let stun = 0;
+        let credits = 10;
+        let day = 1;
+        let clock = 0;
+        let night = false;
+        let coreHp = 10;
+        let kills = 0;
+        let over = false;
+        let zap = 0;
+        let zapCool = 0;
+        let walkFrame = 0;
+        let bots = [];
+        let coins = [];
+        let sparks = [];
+        let tracers = [];
+        let spawns = [];
+        let toast = { text: 'DAY 1 - BUILD BEFORE DARK', color: PAL.yellow, t: 180 };
+        const peaks = Array.from({ length: 14 }, (_, i) => ({ x: i * 46 - 320, h: 30 + rint(45) }));
+        const stars = Array.from({ length: 45 }, () => ({ x: rint(AW), y: 12 + rint(90) }));
+        const shade = document.createElement('canvas');
+        shade.width = AW;
+        shade.height = AH;
+        const sctx = shade.getContext('2d');
+
+        const say = (text, color) => { toast = { text, color, t: 150 }; };
+        const burst = (x, y, color, n = 10) => {
+            for (let i = 0; i < n; i++) sparks.push({ x, y, vx: (Math.random() - 0.5) * 2.4, vy: -Math.random() * 2.2, life: 20 + rint(15), color });
+        };
+        const nearSlot = () => slots.find((s) => Math.abs(s.x - px) < 9);
+
+        // What pressing Space at a build site would do, or null when it's maxed out.
+        function offer(s) {
+            const top = NS_COST[s.kind].length;
+            if (s.kind === 'wall' && s.tier && s.hp < NS_WALL_HP[s.tier] && s.tier === top) return { label: 'REPAIR', cost: 2, repair: true };
+            if (s.tier < top) return { label: s.tier ? `UPGRADE ${NS_LABEL[s.kind]}` : NS_LABEL[s.kind], cost: NS_COST[s.kind][s.tier] };
+            return null;
+        }
+
+        function startNight() {
+            night = true;
+            clock = 0;
+            const list = [...Array(2 + day * 2).fill('crawler'), ...Array(Math.max(0, day - 2)).fill('brute')].sort(() => Math.random() - 0.5);
+            spawns = list.map((type, i) => ({ type, at: Math.floor((i / list.length) * NIGHT * 0.6) + rint(60), side: Math.random() < 0.5 ? -1 : 1 }));
+            say(`NIGHT ${day} - BOTNET INBOUND`, PAL.red);
+            api.sfx('alarm');
+        }
+
+        function startDay() {
+            night = false;
+            clock = 0;
+            for (const b of bots) burst(b.x, GROUND - 4, PAL.yellow, 6);
+            bots = [];
+            day++;
+            const bonus = 3 + day;
+            credits += bonus;
+            coreHp = Math.min(10, coreHp + 2);
+            say(`DAY ${day} - SLA BONUS +${bonus}`, PAL.yellow);
+            api.sfx('power');
+        }
+
+        function act() {
+            const s = nearSlot();
+            if (s) {
+                const o = offer(s);
+                if (!o) return say('FULLY UPGRADED', PAL.fg);
+                if (credits < o.cost) {
+                    api.sfx('hit');
+                    return say(`NEED ${o.cost} CREDITS`, PAL.red);
+                }
+                credits -= o.cost;
+                if (!o.repair) s.tier++;
+                if (s.kind === 'wall') s.hp = NS_WALL_HP[s.tier];
+                burst(s.x, GROUND - 10, PAL.cyan, 10);
+                api.sfx('power');
+                return;
+            }
+            if (zapCool) return;
+            zapCool = 40;
+            zap = 12;
+            api.sfx('shoot');
+            for (const b of bots) {
+                if (Math.abs(b.x - px) > 24) continue;
+                b.hp -= 2;
+                b.x += Math.sign(b.x - px || 1) * 8;
+            }
+        }
+
+        return {
+            get score() { return (day - 1) * 100 + kills * 5; },
+            get over() { return over; },
+            update(inp) {
+                clock++;
+                if (!night && clock >= DAY) startNight();
+                else if (night && clock >= NIGHT) startDay();
+                if (toast && --toast.t <= 0) toast = null;
+                if (zap) zap--;
+                if (zapCool) zapCool--;
+
+                let dir = (inp.held.has('right') ? 1 : 0) - (inp.held.has('left') ? 1 : 0);
+                if (inp.pointer.down && inp.pointer.x < AW * 0.35) dir = -1;
+                else if (inp.pointer.down && inp.pointer.x > AW * 0.65) dir = 1;
+                if (stun) {
+                    stun--;
+                    dir = 0;
+                }
+                px = clamp(px + dir * 1.3, -EDGE + 4, EDGE - 4);
+                if (dir) walkFrame++;
+                if (inp.pressed.has('fire') || inp.pressed.has('up') || inp.pressed.has('tap')) act();
+
+                for (const s of spawns) {
+                    if (s.done || clock < s.at) continue;
+                    s.done = true;
+                    const brute = s.type === 'brute';
+                    bots.push({ type: s.type, x: s.side * EDGE, hp: brute ? 10 : 3, speed: brute ? 0.22 : 0.36 + Math.random() * 0.12, t: rint(60) });
+                }
+
+                for (const s of slots) {
+                    if (!s.tier) continue;
+                    if (s.kind === 'server' && !night && ++s.timer >= (s.tier === 1 ? 360 : 220)) {
+                        s.timer = 0;
+                        if (coins.filter((cn) => cn.from === s).length < 4) coins.push({ x: s.x + rint(9) - 4, y: GROUND - 14, vy: -1.6, from: s });
+                    }
+                    if (s.kind === 'sentry' && night && --s.cool <= 0) {
+                        const range = 70 + s.tier * 15;
+                        const target = bots.filter((b) => Math.abs(b.x - s.x) < range).sort((a, b) => Math.abs(a.x - s.x) - Math.abs(b.x - s.x))[0];
+                        if (target) {
+                            target.hp -= s.tier;
+                            tracers.push({ x1: s.x, x2: target.x, t: 5, color: s.tier === 1 ? PAL.cyan : PAL.magenta });
+                            s.cool = s.tier === 1 ? 55 : 32;
+                        }
+                    }
+                }
+
+                for (const cn of coins) {
+                    if (cn.y < GROUND - 2) {
+                        cn.vy += 0.15;
+                        cn.y = Math.min(GROUND - 2, cn.y + cn.vy);
+                    } else if (Math.abs(cn.x - px) < 5) {
+                        cn.got = true;
+                        credits++;
+                        api.sfx('eat');
+                    }
+                }
+
+                for (const b of bots) {
+                    b.t++;
+                    // The outermost standing firewall on the bot's side blocks it.
+                    const wall = slots
+                        .filter((s) => s.kind === 'wall' && s.tier && Math.sign(s.x) === Math.sign(b.x) && Math.abs(s.x) < Math.abs(b.x) + 1)
+                        .sort((a, c) => Math.abs(c.x) - Math.abs(a.x))[0];
+                    if (wall && Math.abs(b.x - wall.x) < 5) {
+                        b.attacking = true;
+                        wall.hp -= b.type === 'brute' ? 0.1 : 0.03;
+                        if (wall.hp <= 0) {
+                            wall.tier = 0;
+                            wall.hp = 0;
+                            burst(wall.x, GROUND - 10, PAL.red, 16);
+                            api.sfx('boom');
+                            say('FIREWALL DOWN!', PAL.red);
+                        }
+                    } else {
+                        b.attacking = false;
+                        b.x -= Math.sign(b.x) * b.speed;
+                    }
+                    if (b.hp <= 0) {
+                        b.dead = true;
+                        kills++;
+                        burst(b.x, GROUND - 4, b.type === 'brute' ? PAL.magenta : PAL.red);
+                        api.sfx('boom');
+                    } else if (Math.abs(b.x) < 10) {
+                        b.dead = true;
+                        coreHp -= b.type === 'brute' ? 3 : 1;
+                        burst(0, GROUND - 14, PAL.red, 14);
+                        api.sfx('die');
+                        say('MAINFRAME HIT!', PAL.red);
+                        if (coreHp <= 0) over = true;
+                    } else if (!stun && Math.abs(b.x - px) < 5) {
+                        stun = 45;
+                        px = clamp(px + Math.sign(px - b.x || 1) * 10, -EDGE + 4, EDGE - 4);
+                        api.sfx('hit');
+                    }
+                }
+
+                for (const s of sparks) {
+                    s.x += s.vx;
+                    s.y += s.vy;
+                    s.vy += 0.08;
+                    s.life--;
+                }
+                for (const t of tracers) t.t--;
+                bots = bots.filter((b) => !b.dead);
+                coins = coins.filter((cn) => !cn.got);
+                sparks = sparks.filter((s) => s.life > 0);
+                tracers = tracers.filter((t) => t.t > 0);
+            },
+            draw(ctx, frame) {
+                const cam = clamp(px - AW / 2, -EDGE, EDGE - AW);
+                const sx = (x) => Math.round(x - cam);
+                // Daylight: ramps up at dawn, down at dusk, low all night.
+                const light = night ? 0.1 : Math.min(1, 0.3 + clock / 120, 0.3 + (DAY - clock) / 260);
+                const sky = [[6, 8, 18], [70, 118, 176]];
+                for (let i = 0; i < 6; i++) {
+                    ctx.fillStyle = mix(sky[0], sky[1], light * (0.6 + i * 0.08));
+                    ctx.fillRect(0, 10 + i * 24, AW, 24);
+                }
+                if (light < 0.6) {
+                    for (const st of stars) {
+                        ctx.fillStyle = (st.x + Math.floor(frame / 25)) % 6 ? PAL.dim : PAL.fg;
+                        ctx.fillRect(st.x, st.y, 1, 1);
+                    }
+                }
+                const arc = night ? clock / NIGHT : clock / DAY;
+                ctx.fillStyle = night ? '#dfe6f0' : PAL.yellow;
+                const ox = 20 + arc * 200;
+                const oy = 70 - Math.sin(arc * Math.PI) * 45;
+                ctx.fillRect(ox - 3, oy - 2, 7, 5);
+                ctx.fillRect(ox - 2, oy - 3, 5, 7);
+                for (const p of peaks) {
+                    const x = Math.round(p.x - cam * 0.2);
+                    for (let i = 0; i < p.h; i++) {
+                        ctx.fillStyle = i < 6 ? mix([90, 100, 115], [215, 225, 238], light) : mix([12, 16, 26], [40, 52, 72], light);
+                        ctx.fillRect(x - i, GROUND - 26 - p.h + i, i * 2 + 1, 1);
+                    }
+                }
+                ctx.fillStyle = mix([10, 14, 20], [30, 44, 40], light);
+                for (let i = 0; i < AW; i += 2) ctx.fillRect(i, GROUND - 14 - Math.abs(Math.sin((i + cam * 0.5) * 0.03)) * 9, 2, 20);
+                ctx.fillStyle = mix([14, 18, 14], [36, 52, 30], light);
+                ctx.fillRect(0, GROUND, AW, AH - GROUND);
+                ctx.fillStyle = mix([22, 40, 22], [80, 140, 60], light);
+                ctx.fillRect(0, GROUND, AW, 1);
+                ctx.fillStyle = '#ffffff22';
+                ctx.fillRect(sx(-EDGE), GROUND - 40, 1, 40);
+                ctx.fillRect(sx(EDGE), GROUND - 40, 1, 40);
+
+                // Mainframe.
+                const cx = sx(0);
+                ctx.fillStyle = '#1a2230';
+                ctx.fillRect(cx - 8, GROUND - 28, 16, 28);
+                ctx.fillStyle = accentColor();
+                ctx.fillRect(cx - 8, GROUND - 28, 16, 1);
+                ctx.fillRect(cx - 8, GROUND - 28, 1, 28);
+                ctx.fillRect(cx + 7, GROUND - 28, 1, 28);
+                for (let r = 0; r < 7; r++) {
+                    for (let k = 0; k < 4; k++) {
+                        ctx.fillStyle = (r * 3 + k + Math.floor(frame / 7)) % 5 ? PAL.green : PAL.dim;
+                        ctx.fillRect(cx - 5 + k * 3, GROUND - 24 + r * 3, 1, 1);
+                    }
+                }
+                ctx.fillStyle = PAL.dim;
+                ctx.fillRect(cx - 8, GROUND - 32, 16, 2);
+                ctx.fillStyle = coreHp > 3 ? PAL.green : PAL.red;
+                ctx.fillRect(cx - 8, GROUND - 32, Math.round((coreHp / 10) * 16), 2);
+
+                for (const s of slots) {
+                    const x = sx(s.x);
+                    if (x < -12 || x > AW + 12) continue;
+                    if (!s.tier) {
+                        ctx.fillStyle = '#7a6a48';
+                        ctx.fillRect(x, GROUND - 6, 1, 6);
+                        ctx.fillStyle = s.kind === 'wall' ? PAL.red : s.kind === 'sentry' ? PAL.magenta : PAL.cyan;
+                        ctx.fillRect(x + 1, GROUND - 6, 2, 2);
+                    } else if (s.kind === 'server') {
+                        const h = s.tier === 1 ? 14 : 20;
+                        ctx.fillStyle = '#222833';
+                        ctx.fillRect(x - 4, GROUND - h, 8, h);
+                        ctx.fillStyle = '#3a4150';
+                        ctx.fillRect(x - 4, GROUND - h, 8, 1);
+                        for (let r = 0; r < h / 3 - 1; r++) {
+                            ctx.fillStyle = (r + Math.floor(frame / 9) + s.x) % 4 ? PAL.green : accentColor();
+                            ctx.fillRect(x - 2, GROUND - h + 3 + r * 3, 1, 1);
+                            ctx.fillStyle = '#3a4150';
+                            ctx.fillRect(x, GROUND - h + 3 + r * 3, 3, 1);
+                        }
+                    } else if (s.kind === 'sentry') {
+                        ctx.fillStyle = '#5a6372';
+                        ctx.fillRect(x - 1, GROUND - 12, 2, 12);
+                        ctx.fillRect(x - 3, GROUND - 2, 6, 2);
+                        ctx.fillStyle = s.tier === 1 ? PAL.cyan : PAL.magenta;
+                        ctx.fillRect(x - 3, GROUND - 16, 6, 4);
+                        ctx.fillStyle = PAL.fg;
+                        ctx.fillRect(x - 1, GROUND - 15, 2, 1);
+                    } else {
+                        const h = [0, 16, 22, 28][s.tier];
+                        ctx.fillStyle = s.tier === 3 ? '#ff8c42' : PAL.red;
+                        ctx.fillRect(x - 3, GROUND - h, 6, h);
+                        ctx.fillStyle = PAL.darkred;
+                        for (let r = GROUND - h + 3; r < GROUND; r += 4) ctx.fillRect(x - 3, r, 6, 1);
+                        const damage = 1 - s.hp / NS_WALL_HP[s.tier];
+                        ctx.fillStyle = '#000000aa';
+                        for (let k = 0; k < Math.floor(damage * 10); k++) ctx.fillRect(x - 3 + ((k * 5) % 6), GROUND - h + ((k * 7) % h), 2, 2);
+                    }
+                }
+
+                ctx.fillStyle = PAL.yellow;
+                for (const cn of coins) {
+                    ctx.fillRect(sx(cn.x) - 1, Math.round(cn.y) - 1, 3, 3);
+                    ctx.fillStyle = PAL.fg;
+                    ctx.fillRect(sx(cn.x) - 1, Math.round(cn.y) - 1, 1, 1);
+                    ctx.fillStyle = PAL.yellow;
+                }
+
+                for (const b of bots) {
+                    const brute = b.type === 'brute';
+                    const map = brute ? NS_BRUTE : NS_CRAWLER[Math.floor(b.t / 8) % 2];
+                    const w = map[0].length;
+                    const jitter = b.attacking && frame % 10 < 5 ? 1 : 0;
+                    sprite(ctx, map, sx(b.x) - w / 2 + jitter, GROUND - map.length, { '#': brute ? PAL.magenta : PAL.red, o: PAL.yellow });
+                }
+
+                for (const t of tracers) {
+                    ctx.strokeStyle = t.color;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(sx(t.x1) + 0.5, GROUND - 14.5);
+                    ctx.lineTo(sx(t.x2) + 0.5, GROUND - 3.5);
+                    ctx.stroke();
+                }
+
+                if (!stun || frame % 6 < 3) {
+                    sprite(ctx, NS_PLAYER[Math.floor(walkFrame / 8) % 2], sx(px) - 3, GROUND - 12, { h: accentColor(), s: PAL.skin, d: '#2b3445' });
+                }
+                if (zap) {
+                    ctx.strokeStyle = PAL.cyan;
+                    ctx.beginPath();
+                    ctx.arc(sx(px) + 0.5, GROUND - 6, (12 - zap) * 2 + 2, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                for (const s of sparks) {
+                    ctx.fillStyle = s.color;
+                    ctx.fillRect(Math.round(s.x - cam), Math.round(s.y), 1, 1);
+                }
+
+                // Darkness, with pools of light around the player, the mainframe and built machines.
+                const dark = (1 - light) * 0.78;
+                if (dark > 0.02) {
+                    sctx.globalCompositeOperation = 'source-over';
+                    sctx.clearRect(0, 0, AW, AH);
+                    sctx.fillStyle = `rgba(2, 4, 12, ${dark})`;
+                    sctx.fillRect(0, 10, AW, AH - 10);
+                    sctx.globalCompositeOperation = 'destination-out';
+                    const lamp = (x, y, r) => {
+                        const g = sctx.createRadialGradient(x, y, 0, x, y, r);
+                        g.addColorStop(0, 'rgba(0,0,0,1)');
+                        g.addColorStop(1, 'rgba(0,0,0,0)');
+                        sctx.fillStyle = g;
+                        sctx.fillRect(x - r, y - r, r * 2, r * 2);
+                    };
+                    lamp(sx(px), GROUND - 8, 36);
+                    lamp(cx, GROUND - 14, 30);
+                    for (const s of slots) if (s.tier && s.kind !== 'wall') lamp(sx(s.x), GROUND - 10, s.kind === 'sentry' ? 20 : 12);
+                    ctx.drawImage(shade, 0, 0);
+                }
+
+                const here = nearSlot();
+                if (here) {
+                    const o = offer(here);
+                    const text = o ? `${o.label} ${o.cost}` : 'MAXED';
+                    pixelText(ctx, text, clamp(sx(here.x), 30, AW - 30), GROUND - 40, !o ? PAL.dim : credits >= o.cost ? PAL.yellow : PAL.red, 1, 'center');
+                }
+
+                ctx.fillStyle = PAL.yellow;
+                ctx.fillRect(4, 14, 3, 3);
+                pixelText(ctx, `${credits}`, 10, 13, PAL.yellow);
+                pixelText(ctx, `${night ? 'NIGHT' : 'DAY'} ${day}`, AW / 2, 13, night ? PAL.red : PAL.fg, 1, 'center');
+                ctx.fillStyle = PAL.dim;
+                ctx.fillRect(AW / 2 - 20, 20, 40, 1);
+                ctx.fillStyle = night ? PAL.red : PAL.yellow;
+                ctx.fillRect(AW / 2 - 20, 20, Math.round(arc * 40), 1);
+                pixelText(ctx, `CORE ${coreHp}`, AW - 4, 13, coreHp > 3 ? PAL.green : PAL.red, 1, 'right');
+                if (toast && (toast.t > 30 || frame % 8 < 5)) pixelText(ctx, toast.text, AW / 2, 32, toast.color, 1, 'center');
+            },
+        };
+    },
+};
+
+const GAMES = [PACKET_SNAKE, FIREWALL, RIFF_RUNNER, NIGHT_SHIFT];
 
 // ---------- the arcade app ----------
 
@@ -619,7 +1033,7 @@ function arcadeApp(startId = null) {
                 menuSel = (menuSel + (k === 'up' ? -1 : 1) + GAMES.length) % GAMES.length;
                 playSfx('select');
             } else if (k === 'tap') {
-                const i = Math.floor((pointer.y - 62) / 28);
+                const i = Math.floor((pointer.y - 58) / 26);
                 if (i >= 0 && i < GAMES.length) {
                     menuSel = i;
                     startGame(GAMES[i]);
@@ -662,6 +1076,8 @@ function arcadeApp(startId = null) {
         } else if (phase === 'play') {
             game.update({ held, pressed, pointer });
             if (game.over) finish();
+            // A game in play holds off the screensaver, like a video player would.
+            if (frame % 60 === 0) resetIdle();
         }
         pressed = new Set();
     }
@@ -685,7 +1101,7 @@ function arcadeApp(startId = null) {
             pixelText(ctx, 'ORIGINAL RETRO GAMES', AW / 2, 36, PAL.dim, 1, 'center');
             const scores = hiScores();
             GAMES.forEach((g, i) => {
-                const y = 62 + i * 28;
+                const y = 58 + i * 26;
                 const on = i === menuSel;
                 if (on) {
                     ctx.fillStyle = accent;
@@ -696,7 +1112,7 @@ function arcadeApp(startId = null) {
                 pixelText(ctx, `${on && frame % 40 < 28 ? '>' : ' '} ${g.name}`, 28, y + 6, on ? PAL.fg : PAL.dim, 2);
                 pixelText(ctx, `HI ${scores[g.id] || 0}`, AW - 26, y + 14, on ? PAL.yellow : PAL.dim, 1, 'right');
             });
-            pixelText(ctx, 'ENTER PLAY   M SOUND   ALT+W QUIT', AW / 2, AH - 10, PAL.dim, 1, 'center');
+            pixelText(ctx, 'ENTER PLAY   M SOUND   ALT+F FULLSCREEN', AW / 2, AH - 10, PAL.dim, 1, 'center');
             return;
         }
         game.draw(ctx, frame);
@@ -718,7 +1134,7 @@ function arcadeApp(startId = null) {
 
     function loop(ts) {
         raf = requestAnimationFrame(loop);
-        acc += Math.min(100, ts - (last || ts));
+        acc += clamp(ts - (last || ts), 0, 100);
         last = ts;
         // Switching windows, workspaces or tabs pauses the game.
         const active = wm.focused === win && !document.hidden && saverEl.hidden;
@@ -766,6 +1182,8 @@ function arcadeApp(startId = null) {
             });
             el.addEventListener('keyup', (e) => held.delete(KEY_MAP[e.key.toLowerCase()]));
             el.addEventListener('blur', () => held.clear());
+            // Double-click toggles fullscreen for mouse players, outside of play so quick clicks stay game input.
+            canvas.addEventListener('dblclick', () => phase !== 'play' && toggleFullscreen('full'));
             canvas.addEventListener('pointerdown', (e) => {
                 Object.assign(pointer, toGame(e), { down: true, moved: false });
                 pointer.sx = pointer.x;
@@ -859,7 +1277,7 @@ function cmdGames() {
     const scores = hiScores();
     return [
         c('hl', 'Neox Arcade') + c('dim', ' — original retro games (Alt+G)'),
-        ...GAMES.map((g) => `  ${c('exe', `${g.id === 'snake' ? 'packet-snake' : g.id === 'runner' ? 'riff-runner' : g.id}`.padEnd(14))}${g.name.padEnd(14)}${c('dim', `hi ${scores[g.id] || 0}`)}`),
+        ...GAMES.map((g) => `  ${c('exe', g.cmd.padEnd(14))}${g.name.padEnd(14)}${c('dim', `hi ${scores[g.id] || 0}`)}`),
         `  ${c('exe', 'bruteforce'.padEnd(14))}${'Code breaker'.padEnd(14)}${c('dim', scores.bruteforce ? `best ${scores.bruteforce} tries` : 'runs in this terminal')}`,
     ];
 }
@@ -871,5 +1289,6 @@ Object.assign(COMMANDS, {
     snake: { group: 'Hidden', usage: 'snake', desc: 'Packet Snake', run: openGame('snake') },
     firewall: { group: 'Games', usage: 'firewall', desc: 'defend the network from waves of malware', run: openGame('firewall') },
     'riff-runner': { group: 'Games', usage: 'riff-runner', desc: 'endless runner across a guitar fretboard', run: openGame('runner') },
+    'night-shift': { group: 'Games', usage: 'night-shift', desc: 'build by day, defend the datacenter by night', run: openGame('nightshift') },
     bruteforce: { group: 'Games', usage: 'bruteforce', desc: 'crack a hex PIN by deduction, right here in the terminal', run: cmdBruteforce },
 });

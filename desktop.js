@@ -173,11 +173,29 @@ function moveFocus(dir) {
     if (best) focusWindow(best.w);
 }
 
-function toggleFullscreen() {
+// Like Omarchy: 'full' (Super+F) covers the whole screen, bar included, and takes the browser
+// fullscreen too; 'max' (Super+Alt+F, "full width") fills the desktop but keeps the bar.
+function toggleFullscreen(mode = 'full') {
     if (!wm.focused) return;
-    wm.focused.full = !wm.focused.full;
+    wm.focused.full = wm.focused.full === mode ? false : mode;
     layout();
 }
+
+// Browser fullscreen follows whether the active workspace shows a 'full' window. Requests can only
+// succeed during a key press or click, which is when layout() runs for these changes.
+function syncBrowserFullscreen(wanted) {
+    if (wanted && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+    else if (!wanted && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+}
+
+// Leaving browser fullscreen with Esc or F11 drops the window back into the tiling layout.
+document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) return;
+    const win = wm.windows.find((w) => w.ws === wm.active && w.full === 'full');
+    if (!win) return;
+    win.full = false;
+    layout();
+})
 
 function place(win, r) {
     win.rect = r;
@@ -208,7 +226,18 @@ function layout() {
     const visible = wm.windows.filter((w) => w.ws === wm.active);
     // Phones get a monocle layout: only the focused window is shown.
     const solo = visible.find((w) => w.full) || (mobile && visible.length ? (visible.includes(wm.focused) ? wm.focused : visible[0]) : null);
-    for (const w of wm.windows) w.el.classList.toggle('off', w.ws !== wm.active || (!!solo && w !== solo));
+    const covering = solo?.full === 'full';
+    for (const w of wm.windows) {
+        w.el.classList.toggle('off', w.ws !== wm.active || (!!solo && w !== solo));
+        w.el.classList.toggle('fs', w === solo && covering);
+    }
+    // True fullscreen hides the bar, so measure the desktop again once it's gone.
+    if (document.body.classList.contains('fs-mode') !== covering) {
+        document.body.classList.toggle('fs-mode', covering);
+        syncBrowserFullscreen(covering);
+        return layout();
+    }
+    syncBrowserFullscreen(covering);
     if (solo) place(solo, { x: 0, y: 0, w: W, h: H });
     else dwindle(visible, { x: out, y: out, w: W - 2 * out, h: H - 2 * out }, mobile ? 0 : GAPS_IN * 2);
     desktopEl.classList.toggle('empty', !visible.length);
@@ -534,7 +563,8 @@ const KEYBINDS = [
     ['Alt+Enter', 'New terminal'],
     ['Alt+Space', 'Launcher'],
     ['Alt+W', 'Close window'],
-    ['Alt+F', 'Toggle fullscreen'],
+    ['Alt+F', 'Fullscreen (Super+F where the browser allows)'],
+    ['Alt+Shift+F', 'Full width, keeps the bar'],
     ['Alt+Arrows', 'Move focus'],
     ['Alt+1..9', 'Switch workspace'],
     ['Alt+Shift+1..9', 'Move window to workspace'],
@@ -549,6 +579,12 @@ window.addEventListener('keydown', (e) => {
     }
     if (shared.booting || desktopEl.hidden) return;
     if (!launcherEl.hidden) return launcherKey(e);
+    // Super+F where the browser lets it through (⌘+F on macOS); Linux and Windows keep Super for the OS.
+    if (e.metaKey && !e.altKey && !e.ctrlKey && e.code === 'KeyF') {
+        e.preventDefault();
+        e.stopPropagation();
+        return toggleFullscreen(e.shiftKey ? 'max' : 'full');
+    }
     if (!e.altKey || e.ctrlKey || e.metaKey) return;
     const digit = e.code.match(/^Digit([1-9])$/)?.[1];
     const arrow = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[e.key];
@@ -557,7 +593,7 @@ window.addEventListener('keydown', (e) => {
     else if (e.key === 'Enter') openTerminal();
     else if (e.code === 'Space' && !e.shiftKey) openLauncher();
     else if (e.code === 'KeyW' || e.code === 'KeyQ') wm.focused && closeWindow(wm.focused);
-    else if (e.code === 'KeyF') toggleFullscreen();
+    else if (e.code === 'KeyF') toggleFullscreen(e.shiftKey ? 'max' : 'full');
     else if (arrow) moveFocus(arrow);
     else return;
     e.preventDefault();
@@ -579,7 +615,7 @@ function cmdHyprctl({ args }) {
         `\tclass: ${w.app ? w.app.cls : 'com.mitchellh.ghostty'}`,
         `\ttitle: ${esc(windowTitle(w))}`,
         `\tsize: ${Math.round(w.rect?.w || 0)},${Math.round(w.rect?.h || 0)}`,
-        `\tfullscreen: ${w.full ? 2 : 0}`,
+        `\tfullscreen: ${w.full === 'full' ? 2 : w.full ? 1 : 0}`,
         `\tfocused: ${w === wm.focused ? 1 : 0}`,
         '',
     ];
@@ -602,7 +638,7 @@ function cmdHyprctl({ args }) {
                 workspace: () => switchWorkspace(Math.min(9, Math.max(1, +rest[0] || 1))),
                 movetoworkspace: () => moveToWorkspace(Math.min(9, Math.max(1, +rest[0] || 1))),
                 killactive: () => wm.focused && closeWindow(wm.focused),
-                fullscreen: toggleFullscreen,
+                fullscreen: () => toggleFullscreen(rest[0] === '1' ? 'max' : 'full'),
                 exec: () => openTerminal({ run: rest.slice(1).join(' ') || undefined }),
             };
             if (!jobs[action]) return err(`Invalid dispatcher: ${action ?? ''}`);
