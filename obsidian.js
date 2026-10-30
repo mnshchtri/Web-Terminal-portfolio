@@ -99,6 +99,9 @@ Agentless infrastructure observability. I'm the creator and maintainer.
 
 Website: https://infraeye.manishkarki7.com.np
 
+> [!tip] Try the demo
+> Press Alt+I on this desktop, or run \`infraeye\` in a terminal. Hit **Simulate incident** to watch a self-healing rule fire.
+
 Related: [[Kubernetes on bare metal]] · [[DeployForge]] · born from work at [[Citytech]]
 
 #project`,

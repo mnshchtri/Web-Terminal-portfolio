@@ -232,6 +232,7 @@ Mar 2017 – Aug 2018 · Kapan, Kathmandu
 # InfraEye — agentless infrastructure observability   [creator & maintainer]
 https://github.com/mnshchtri/infra-eye
 https://infraeye.manishkarki7.com.np
+Try it right here: run infraeye (or press Alt+I) for a demo with simulated data.
 
 - Real-time CPU/memory/disk/network telemetry across bare metal and Kubernetes
 - Self-healing engine: alert rules trigger automated SSH-based remediation
