@@ -6,9 +6,15 @@ const HOME = '/home/neox';
 const dir = (children = {}) => ({ type: 'dir', children });
 const file = (content) => ({ type: 'file', content: content.replace(/^\n/, '') });
 const link = (target) => ({ type: 'link', target });
+// Private nodes are only readable by their owner (and root).
+const secret = (node, mode) => Object.assign(node, { private: true, mode });
 
 const FS = dir({
     bin: dir(),   // filled with the command list at startup
+    boot: dir({
+        'vmlinuz-linux': file('\x7fELF kernel image\n'),
+        'initramfs-linux.img': file('\x1f\x8b compressed cpio archive\n'),
+    }),
     etc: dir({
         hostname: file('neox\n'),
         'os-release': file(`
@@ -25,12 +31,41 @@ Welcome to NeoxOS — the personal system of Manish Karki (Neox).
   * Start here:   cat README.md
   * Commands:     help
   * Overview:     neofetch
+  * Challenge:    there's a flag in /root. Can you get root?  (stuck? hint)
 `),
         passwd: file(`
 root:x:0:0:root:/root:/bin/bash
 neox:x:1000:1000:Manish Karki:/home/neox:/bin/bash
 visitor:x:1001:1001:Guest:/home/neox:/bin/bash
+postgres:x:970:970:PostgreSQL user:/var/lib/postgres:/usr/bin/nologin
+wazuh:x:965:965:Wazuh agent:/var/ossec:/usr/bin/nologin
+nobody:x:65534:65534:Kernel Overflow User:/:/usr/bin/nologin
 `),
+        group: file(`
+root:x:0:root
+wheel:x:998:neox
+docker:x:969:neox
+users:x:100:visitor
+neox:x:1000:
+visitor:x:1001:
+`),
+        hosts: file(`
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   neox
+`),
+        shadow: secret(file(`
+root:!*:20380::::::
+neox:$6$rounds=656000$Lynx$wQ8vR1kN3mZ.7yT2pX9cJ5hL0aG4sD6fB8eK1nU3iO7qW2rE5tY9uP0zA3xC6vB:20380:0:99999:7:::
+visitor::20380:0:99999:7:::
+`), '-rw-------'),
+        sudoers: secret(file(`
+## Allow root and members of group wheel to execute any command
+root ALL=(ALL:ALL) ALL
+%wheel ALL=(ALL:ALL) ALL
+
+Defaults lecture="once"
+`), '-r--r-----'),
         shells: file('/bin/bash\n/bin/nsh\n'),
     }),
     home: dir({
@@ -52,7 +87,18 @@ This is my home directory. Look around like you would on any Linux box:
   open github                links live in ~/links
 
 Shortcuts: whois, experience, projects, skills, contact, music, blogs
-Tip: Tab completes, ↑/↓ walks history, Ctrl+L clears, Ctrl+C cancels.
+
+It's a real-feeling Linux box, so poke at it:
+  htop · vim · nano · less · man · systemctl status infra-eye · journalctl
+  weather · curl wttr.in/London · gh repo list · ping github.com
+  git clone https://github.com/mnshchtri/infra-eye   (real README, live)
+  theme list · cmatrix · sl · fortune | cowsay | lolcat
+
+There's also a flag in /root. You start as a guest with no sudo. Get root.
+  (stuck? run: hint)
+
+Tip: Tab completes, ↑/↓ walks history, Ctrl+L clears, Ctrl+C interrupts.
+Broke something? reboot puts everything back.
 `),
             'about.txt': file(`
 Greetings! I'm Manish Karki, also known as Neox.
@@ -330,6 +376,31 @@ alias la='ls -a'
 alias ..='cd ..'
 PS1='\\u@\\h:\\w\\$ '
 `),
+            // The world-readable history file is the intended way in: neox piped a password into sudo.
+            '.bash_history': file(`
+ls -la
+cd ~/projects
+kubectl get pods -A
+kubectl rollout status deploy/infra-eye -n observability
+docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/mnshchtri/infra-eye:1.8 --push .
+helm upgrade --install cyberlynx ./chart -n security
+nmap -sV -p- 10.0.0.12
+journalctl -u wazuh-agent -f
+echo 'Tr1murt1@neox' | sudo -S systemctl restart wazuh-agent
+history -c
+vim ~/.bashrc
+neofetch
+`),
+            '.ssh': secret(dir({
+                id_ed25519: file(`
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5pY2UgdHJ5LCBidXQgdGhpcyBrZXkgb3BlbnMgbm90
+aGluZy4gR29vZCBpbnN0aW5jdHMgdGhvdWdoIOKAlCBrZWVwIGdvaW5nLg==
+-----END OPENSSH PRIVATE KEY-----
+`),
+                'id_ed25519.pub': file('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE5lb3hQb3J0Zm9saW9LZXk neox@neox\n'),
+                known_hosts: file('github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n'),
+            }), 'drwx------'),
             '.secret': file(`
 You found it. Curiosity is the whole job.
   — neox
@@ -338,6 +409,29 @@ flag{n3v3r_st0p_3xpl0r1ng}
 `),
         }),
     }),
+    root: secret(dir({
+        'flag.txt': file(`
+  ___  ___   ___ _____ ___ ___  _
+ | _ \\/ _ \\ / _ \\_   _| __|   \\| |
+ |   / (_) | (_) || | | _|| |) |_|
+ |_|_\\___/ \\___/ |_| |___|___/(_)
+
+flag{pr1v3sc_v14_sh3ll_h1st0ry}
+
+You enumerated the box, found a credential leaked in shell history, pivoted
+to a user with sudo rights and escalated to root. That's a real attack path,
+and finding (then fixing) exactly this kind of thing is my day job.
+
+Enjoyed it? Let's talk: mnshchtri@gmail.com
+`),
+        '.bash_history': file(`
+pacman -Syu
+systemctl restart infra-eye
+journalctl -u wazuh-agent -n 50
+kubectl get pods -A
+# note to self: never, ever run  rm -rf --no-preserve-root /
+`),
+    }), 'drwx------'),
     tmp: dir(),
     var: dir({
         log: dir({
@@ -348,5 +442,4 @@ sudo: visitor : user NOT in sudoers ; TTY=pts/0 ; PWD=/home/neox ; COMMAND=/bin/
         }),
     }),
     usr: dir({ share: dir({ dict: dir() }) }),
-    root: dir(),
 });

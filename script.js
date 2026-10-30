@@ -1,18 +1,29 @@
 'use strict';
 
 // nsh — a small bash-like shell over the virtual filesystem in fs.js.
+// apps.js adds full-screen programs (less, htop, vim...), sys.js adds system tools, the bar and themes.
 
 const terminal = document.getElementById('terminal');
 const output = document.getElementById('output');
 const inputLine = document.getElementById('input-line');
 const promptEl = document.getElementById('prompt');
 const input = document.getElementById('user-input');
+const screenEl = document.getElementById('screen');
 
-const USER = 'visitor';
+const GUEST = 'visitor';
 const HOST = 'neox';
 const KERNEL = '6.17.0-neox';
 const BOOT_TIME = Date.now();
 const BUILD_DATE = new Date(document.lastModified);
+
+// neox's password. It leaks in /home/neox/.bash_history — finding it is the privilege-escalation puzzle.
+const NEOX_PASSWORD = 'Tr1murt1@neox';
+
+const USERS = {
+    root: { uid: 0, home: '/root', groups: '0(root)' },
+    neox: { uid: 1000, home: HOME, groups: '1000(neox),998(wheel),969(docker)' },
+    visitor: { uid: 1001, home: HOME, groups: '1001(visitor),100(users)' },
+};
 
 const BANNER = String.raw`
  ███▄    █ ▓█████  ▒█████  ▒██   ██▒
@@ -47,9 +58,12 @@ const LOGO = String.raw`
 .\`                                 \`/`.slice(1).replace(/\\`/g, '`').split('\n');
 
 const state = {
+    user: GUEST,
+    sessions: [],   // users we su'd from, so `exit` can return to them
+    sudoUntil: 0,   // sudo caches the password for a few minutes, like the real thing
     cwd: HOME,
     env: {
-        USER, LOGNAME: USER, HOME, HOSTNAME: HOST, SHELL: '/bin/nsh',
+        USER: GUEST, LOGNAME: GUEST, HOME, HOSTNAME: HOST, SHELL: '/bin/nsh',
         TERM: 'xterm-256color', LANG: 'en_US.UTF-8', EDITOR: 'nvim',
         PATH: '/usr/local/bin:/usr/bin:/bin', PWD: HOME, OLDPWD: HOME,
     },
@@ -57,26 +71,29 @@ const state = {
         ll: 'ls -la',
         la: 'ls -a',
         '..': 'cd ..',
-        whois: 'cat ~/about.txt',
-        experience: 'cat ~/experience/*',
-        projects: 'grep -h ^# ~/projects/*',
-        skills: 'cat ~/skills.txt',
-        education: 'cat ~/education.txt',
-        certs: 'cat ~/certifications.txt',
-        contact: 'cat ~/contact.txt',
-        music: 'cat ~/music/README.txt',
-        blogs: 'ls -l ~/links/medium',
+        whois: 'cat ~neox/about.txt',
+        experience: 'cat ~neox/experience/*',
+        projects: 'grep -h ^# ~neox/projects/*',
+        skills: 'cat ~neox/skills.txt',
+        education: 'cat ~neox/education.txt',
+        certs: 'cat ~neox/certifications.txt',
+        contact: 'cat ~neox/contact.txt',
+        music: 'cat ~neox/music/README.txt',
+        blogs: 'ls -l ~neox/links/medium',
     },
     history: JSON.parse(localStorage.getItem('nsh_history') || '[]'),
     histIndex: null,
     draft: '',
     status: 0,
+    depth: 0,
     busy: false,
     abort: false,
     skip: false,
     pending: null,
     keyWaiter: null,
     lastTab: null,
+    app: null,
+    journal: [],
 };
 
 // ---------- output helpers ----------
@@ -102,6 +119,8 @@ function print(lines) {
         div.innerHTML = line;
         output.appendChild(div);
     }
+    // Keep scrollback bounded (`yes` would otherwise grow the page forever).
+    while (output.childElementCount > 4000) output.firstElementChild.remove();
     terminal.scrollTop = terminal.scrollHeight;
 }
 
@@ -110,18 +129,55 @@ function err(msg) {
     state.status = 1;
 }
 
+function journal(unit, msg) {
+    state.journal.push({ time: new Date(), unit, msg });
+}
+
+const isRoot = () => state.user === 'root';
+
 function promptHtml() {
-    return `${c('u', `${USER}@${HOST}`)}:${c('p', esc(tildify(state.cwd)))}$ `;
+    const root = isRoot();
+    return `${c(root ? 'r' : 'u', `${state.user}@${HOST}`)}:${c('p', esc(tildify(state.cwd)))}${root ? '#' : '$'} `;
 }
 
 function updatePrompt() {
     promptEl.innerHTML = promptHtml();
 }
 
+function setTitle(running) {
+    document.title = running ? `${running} — ${state.user}@${HOST}` : `${state.user}@${HOST}:${tildify(state.cwd)}`;
+}
+
+// ---------- users ----------
+
+function setUser(user, login) {
+    state.user = user;
+    Object.assign(state.env, { USER: user, LOGNAME: user, HOME: USERS[user].home });
+    if (login) state.cwd = state.env.PWD = USERS[user].home;
+}
+
+function pushUser(user, login) {
+    state.sessions.push({ user: state.user, cwd: state.cwd });
+    setUser(user, login);
+}
+
+function popUser() {
+    const prev = state.sessions.pop();
+    setUser(prev.user);
+    state.cwd = state.env.PWD = prev.cwd;
+}
+
 // ---------- filesystem ----------
 
+function expandTilde(path) {
+    const m = path.match(/^~([a-z_][\w-]*)?(?=\/|$)/);
+    if (!m) return path;
+    const home = m[1] ? USERS[m[1]]?.home : state.env.HOME;
+    return home ? home + path.slice(m[0].length) : path;
+}
+
 function normalize(path) {
-    if (path === '~' || path.startsWith('~/')) path = HOME + path.slice(1);
+    path = expandTilde(path);
     const abs = path.startsWith('/') ? path : `${state.cwd}/${path}`;
     const parts = [];
     for (const p of abs.split('/')) {
@@ -141,18 +197,48 @@ function getNode(abs) {
     return node;
 }
 
-const tildify = (abs) => (abs === HOME ? '~' : abs.startsWith(HOME + '/') ? '~' + abs.slice(HOME.length) : abs);
+const tildify = (abs) => {
+    const home = state.env.HOME;
+    return abs === home ? '~' : abs.startsWith(home + '/') ? '~' + abs.slice(home.length) : abs;
+};
 const basename = (abs) => abs.split('/').filter(Boolean).pop() || '/';
 const parentOf = (abs) => normalize(abs + '/..');
-const isForbidden = (abs) => abs === '/root' || abs.startsWith('/root/');
 const isSystem = (abs) => !(abs === HOME || abs.startsWith(HOME + '/') || abs === '/tmp' || abs.startsWith('/tmp/'));
 const ownerOf = (abs, node) => node.owner || (isSystem(abs) ? 'root' : 'neox');
 
-// The visitor may create new entries in ~ and /tmp, but only modify or delete their own.
-function canModify(parentAbs, node) {
-    if (node) return node.owner === USER;
+// Private nodes (/root, ~/.ssh, /etc/shadow...) are only readable by their owner and root.
+function isForbidden(abs) {
+    if (isRoot()) return false;
+    let node = FS;
+    let path = '';
+    for (const p of abs.split('/').filter(Boolean)) {
+        if (node.type !== 'dir' || !Object.hasOwn(node.children, p)) return false;
+        node = node.children[p];
+        path += '/' + p;
+        if (node.private && ownerOf(path, node) !== state.user) return true;
+    }
+    return false;
+}
+
+// Existing files are protected by ownership; anyone may create new ones under ~ and /tmp.
+function canModify(abs) {
+    if (isRoot()) return true;
+    if (isForbidden(abs)) return false;
+    const node = getNode(abs);
+    if (node) return ownerOf(abs, node) === state.user;
+    const parentAbs = parentOf(abs);
     const parent = getNode(parentAbs);
-    return parent.owner === USER || !isSystem(parentAbs);
+    return parent?.type === 'dir' && (ownerOf(parentAbs, parent) === state.user || !isSystem(parentAbs));
+}
+
+function writeFile(abs, content, append) {
+    const node = getNode(abs);
+    if (node) {
+        node.content = append ? node.content + content : content;
+        node.mtime = new Date();
+    } else {
+        getNode(parentOf(abs)).children[basename(abs)] = { type: 'file', content, owner: state.user, mtime: new Date() };
+    }
 }
 
 function fmtTime(d) {
@@ -268,11 +354,11 @@ function longEntry(name, node, abs) {
     const nlink = node.type === 'dir' ? 2 + Object.values(node.children).filter((n) => n.type === 'dir').length : 1;
     const owner = ownerOf(abs, node).padEnd(7);
     const target = node.type === 'link' ? ` -> ${linkify(esc(node.target))}` : '';
-    return `${perms} ${String(nlink).padStart(2)} ${owner} ${owner} ${String(size).padStart(5)} ${fmtTime(node.mtime || BUILD_DATE)} ${colorName(name, node)}${target}`;
+    return `${node.mode || perms} ${String(nlink).padStart(2)} ${owner} ${owner} ${String(size).padStart(5)} ${fmtTime(node.mtime || BUILD_DATE)} ${colorName(name, node)}${target}`;
 }
 
 function cmdCd({ args }) {
-    let target = args[0] ?? HOME;
+    let target = args[0] ?? state.env.HOME;
     if (target === '-') {
         target = state.env.OLDPWD;
         print(esc(tildify(target)));
@@ -314,7 +400,7 @@ function cmdTree({ args }) {
             out.push(c('dim', prefix + (last ? '└── ' : '├── ')) + colorName(n, child) + target);
             if (child.type === 'dir') {
                 dirs++;
-                walk(child, `${dirAbs}/${n}`, prefix + (last ? '    ' : '│   '));
+                walk(child, `${dirAbs}/${n}`.replace('//', '/'), prefix + (last ? '    ' : '│   '));
             } else {
                 files++;
             }
@@ -341,12 +427,14 @@ function cmdGrep({ args, stdin }) {
         const abs = normalize(p);
         const node = getNode(abs);
         if (node?.type === 'dir' && flags.has('r')) {
-            (function collect(n, display) {
+            (function collect(n, nAbs, display) {
+                if (isForbidden(nAbs)) return err(`grep: ${display}: Permission denied`);
                 for (const [name, child] of Object.entries(n.children).sort()) {
-                    if (child.type === 'dir') collect(child, `${display}/${name}`);
-                    else if (child.type === 'file') sources.push([`${display}/${name}`, child.content]);
+                    const childAbs = `${nAbs}/${name}`.replace('//', '/');
+                    if (child.type === 'dir') collect(child, childAbs, `${display}/${name}`);
+                    else if (child.type === 'file' && !child.bin && !isForbidden(childAbs)) sources.push([`${display}/${name}`, child.content]);
                 }
-            })(node, p.replace(/\/$/, ''));
+            })(node, abs, p.replace(/\/$/, ''));
         } else {
             const text = readFile(p, 'grep');
             if (text != null) sources.push([p, text]);
@@ -426,17 +514,10 @@ function cmdTouch({ args }) {
     for (const p of args) {
         const abs = normalize(p);
         const node = getNode(abs);
-        const parent = getNode(parentOf(abs));
-        if (node) {
-            if (canModify(parentOf(abs), node)) node.mtime = new Date();
-            else err(`touch: cannot touch '${p}': Permission denied`);
-        } else if (!parent || parent.type !== 'dir') {
-            err(`touch: cannot touch '${p}': No such file or directory`);
-        } else if (!canModify(parentOf(abs))) {
-            err(`touch: cannot touch '${p}': Permission denied`);
-        } else {
-            parent.children[basename(abs)] = { type: 'file', content: '', owner: USER, mtime: new Date() };
-        }
+        if (!node && getNode(parentOf(abs))?.type !== 'dir') err(`touch: cannot touch '${p}': No such file or directory`);
+        else if (!canModify(abs)) err(`touch: cannot touch '${p}': Permission denied`);
+        else if (node) node.mtime = new Date();
+        else writeFile(abs, '');
     }
 }
 
@@ -456,34 +537,62 @@ function cmdMkdir({ args }) {
                 continue;
             }
             if (!last && !flags.has('p')) return err(`mkdir: cannot create directory '${p}': No such file or directory`);
-            if (!canModify(parentAbs)) return err(`mkdir: cannot create directory '${p}': Permission denied`);
-            getNode(parentAbs).children[parts[i]] = { type: 'dir', children: {}, owner: USER, mtime: new Date() };
+            if (!canModify(cur)) return err(`mkdir: cannot create directory '${p}': Permission denied`);
+            getNode(parentAbs).children[parts[i]] = { type: 'dir', children: {}, owner: state.user, mtime: new Date() };
         }
     }
 }
 
+// Deleting any of these as root takes the whole system down.
+const CRITICAL = ['/', '/bin', '/usr', '/etc', '/boot'];
+
 function cmdRm({ args }) {
-    const { flags, rest } = parseFlags(args);
+    const noPreserve = args.includes('--no-preserve-root');
+    const { flags, rest } = parseFlags(args.filter((a) => !a.startsWith('--')));
     const recursive = flags.has('r') || flags.has('R');
-    if (recursive && rest.some((p) => p === '/' || p === '/*' || normalize(p) === '/')) {
-        return print([
-            c('err', "rm: it is dangerous to operate recursively on '/'"),
-            c('err', 'rm: use --no-preserve-root to override this failsafe'),
-            c('dim', '...and you would still need root. Nice try though.'),
-        ]);
-    }
     if (!rest.length) return err('rm: missing operand');
-    for (const p of rest) {
-        const abs = normalize(p);
+    const targets = rest.map(normalize);
+    if (recursive && targets.includes('/') && !noPreserve) {
+        err("rm: it is dangerous to operate recursively on '/'");
+        err('rm: use --no-preserve-root to override this failsafe');
+        return;
+    }
+    if (recursive && isRoot() && targets.some((t) => CRITICAL.includes(t))) return meltdown();
+    rest.forEach((p, i) => {
+        const abs = targets[i];
         const node = getNode(abs);
         if (!node) {
             if (!flags.has('f')) err(`rm: cannot remove '${p}': No such file or directory`);
         } else if (node.type === 'dir' && !recursive) {
             err(`rm: cannot remove '${p}': Is a directory`);
-        } else if (!canModify(parentOf(abs), node)) {
+        } else if (!canModify(abs)) {
             err(`rm: cannot remove '${p}': Permission denied`);
         } else {
             delete getNode(parentOf(abs)).children[basename(abs)];
+        }
+    });
+}
+
+function cmdChmod({ args }) {
+    const [mode, ...paths] = args.filter((a) => a !== '-R');
+    if (!mode || !paths.length) return err(`chmod: missing operand${mode ? ` after '${mode}'` : ''}`);
+    const numeric = /^[0-7]{3,4}$/.test(mode);
+    if (!numeric && !/^[ugoa]*[+=-][rwx]+$/.test(mode)) return err(`chmod: invalid mode: '${mode}'`);
+    for (const p of paths) {
+        const abs = normalize(p);
+        const node = getNode(abs);
+        if (!node) {
+            err(`chmod: cannot access '${p}': No such file or directory`);
+        } else if (!canModify(abs)) {
+            err(`chmod: changing permissions of '${p}': Operation not permitted`);
+        } else if (numeric) {
+            const bits = mode.slice(-3);
+            const rwx = [...bits].map((d) => ['r', 'w', 'x'].map((ch, i) => (d & (4 >> i) ? ch : '-')).join('')).join('');
+            node.mode = (node.type === 'dir' ? 'd' : '-') + rwx;
+            node.exe = /[1357]/.test(bits);
+        } else if (mode.includes('x')) {
+            delete node.mode;
+            node.exe = !mode.includes('-');
         }
     }
 }
@@ -496,28 +605,55 @@ function cmdOpen({ args }) {
             const node = getNode(normalize(a)) || getNode(`${HOME}/links/${a}`);
             if (node?.type === 'link') url = node.target;
             else if (node) return err(`xdg-open: no application registered for '${a}' — try: cat ${a}`);
-            else return err(`xdg-open: ${a}: No such file or directory (see: ls ~/links)`);
+            else return err(`xdg-open: ${a}: No such file or directory (see: ls ~neox/links)`);
         }
         window.open(url, '_blank', 'noopener');
         print(`Opening ${linkify(esc(url))}`);
     }
 }
 
+// Run each line of a script through the shell. Output goes straight to the terminal.
+async function runScript(text) {
+    if (state.depth > 16) return err('nsh: maximum script nesting level exceeded');
+    state.depth++;
+    try {
+        for (const line of text.split('\n')) {
+            if (!line.trim() || line.trim().startsWith('#')) continue;
+            await runLine(line);
+            if (state.abort) break;
+        }
+    } finally {
+        state.depth--;
+    }
+}
+
+async function cmdSource({ name, args }) {
+    if (!args.length) return err(`${name}: filename argument required`);
+    const text = readFile(args[0], name);
+    if (text != null) await runScript(text);
+}
+
+async function cmdShell({ name, args }) {
+    if (!args.length) return err(`${name}: interactive subshells aren't supported here — try: ${name} script.sh`);
+    return cmdSource({ name, args });
+}
+
 function cmdNeofetch() {
     const kv = (k, v) => `${c('u', k)}: ${esc(v)}`;
-    const title = `${USER}@${HOST}`;
-    const palette = ['#15161e', '#f7768e', '#9ece6a', '#e0af68', '#7aa2f7', '#bb9af7', '#7dcfff', '#a9b1d6'];
+    const title = `${state.user}@${HOST}`;
+    const palette = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'fg'];
     const info = [
-        `${c('u', USER)}@${c('u', HOST)}`,
+        `${c('u', esc(state.user))}@${c('u', HOST)}`,
         '-'.repeat(title.length),
         kv('OS', 'NeoxOS (Arch-based) x86_64'),
-        kv('Host', 'GitHub Pages'),
+        kv('Host', 'Cloudflare Edge'),
         kv('Kernel', KERNEL),
         kv('Uptime', fmtUptime()),
         kv('Packages', `${Object.keys(COMMANDS).length} (nsh)`),
-        kv('Shell', 'nsh 1.0'),
+        kv('Shell', 'nsh 1.1'),
         kv('Resolution', `${screen.width}x${screen.height}`),
         kv('WM', 'Hyprland'),
+        kv('Theme', currentTheme()),
         kv('Terminal', 'web-tty'),
         kv('CPU', `${navigator.hardwareConcurrency || '?'} cores`),
         '',
@@ -525,9 +661,9 @@ function cmdNeofetch() {
         kv('Role', 'DevSecOps Engineer @ Citytech'),
         kv('Focus', 'Offensive Security, Platform Eng'),
         kv('Location', 'Kathmandu, Nepal'),
-        kv('Contact', 'cat ~/contact.txt'),
+        kv('Contact', 'cat ~neox/contact.txt'),
         '',
-        palette.map((col) => `<span style="background:${col}">   </span>`).join(''),
+        palette.map((col) => `<span style="background:var(--${col})">   </span>`).join(''),
     ];
     return [`<div class="neofetch"><pre class="logo">${esc(LOGO.join('\n'))}</pre><pre>${info.join('\n')}</pre></div>`];
 }
@@ -539,19 +675,19 @@ function cmdHelp() {
     const portfolio = Object.keys(state.aliases).filter((a) => state.aliases[a].includes('~'));
     const row = (names) => `  ${names.map((n) => c('exe', n)).join('  ')}`;
     return [
-        'nsh, version 1.0 — the NeoxOS shell (bash-ish)',
+        'nsh, version 1.1 — the NeoxOS shell (bash-ish)',
         '',
         c('hl', 'Portfolio') + c('dim', ' (aliases — run `alias` to see what they do)'),
         row(portfolio),
         '',
         ...Object.entries(groups).flatMap(([g, names]) => [c('hl', g), row(names), '']),
-        `Shell features: pipes ${c('y', '|')}, redirection ${c('y', '&gt; &gt;&gt;')}, ${c('y', '&amp;&amp; || ;')}, ${c('y', '$VARS')}, globs ${c('y', '*')}, ${c('y', '!!')}`,
-        `Keys: Tab completes, ↑/↓ history, Ctrl+L clear, Ctrl+C cancel, Ctrl+U/W kill`,
-        `Type ${c('exe', 'man &lt;command&gt;')} for details. New here? ${c('exe', 'cat README.md')}`,
+        `Shell features: pipes ${c('y', '|')}, redirection ${c('y', '&gt; &gt;&gt;')}, ${c('y', '&amp;&amp; || ;')}, ${c('y', '$VARS')}, globs ${c('y', '*')}, ${c('y', '!!')}, scripts ${c('y', './x.sh')}`,
+        `Keys: Tab completes, ↑/↓ history, Ctrl+L clear, Ctrl+C interrupt, Ctrl+A/E/U line editing`,
+        `Type ${c('exe', 'man &lt;command&gt;')} for details. New here? ${c('exe', 'cat README.md')}. Feeling brave? ${c('exe', 'hint')}`,
     ];
 }
 
-function cmdMan({ args }) {
+function cmdMan({ args, piped }) {
     if (!args.length) return err('What manual page do you want?\nFor example, try \'man man\'.');
     const name = args[0];
     const cmd = COMMANDS[name];
@@ -560,8 +696,9 @@ function cmdMan({ args }) {
         return err(`No manual entry for ${name}`);
     }
     const up = name.toUpperCase();
-    return [
-        c('hl', `${esc(up)}(1)${' '.repeat(Math.max(4, 30 - up.length))}User Commands${' '.repeat(Math.max(4, 30 - up.length))}${esc(up)}(1)`),
+    const pad = ' '.repeat(Math.max(4, 30 - up.length));
+    const page = [
+        c('hl', `${esc(up)}(1)${pad}User Commands${pad}${esc(up)}(1)`),
         '',
         c('hl', 'NAME'),
         `       ${esc(name)} - ${esc(cmd.desc)}`,
@@ -574,14 +711,18 @@ function cmdMan({ args }) {
         '',
         c('dim', `NeoxOS                          ${fmtTime(BUILD_DATE)}                          ${esc(up)}(1)`),
     ];
+    return piped ? page : openPager(page, `Manual page ${name}(1)`);
 }
+
+// Commands outside the shell only exist while their binary is still in /bin.
+const installed = (name) => COMMANDS[name]?.builtin || !!getNode(`/bin/${name}`);
 
 function cmdWhich({ args }) {
     const out = [];
     for (const a of args) {
         if (state.aliases[a]) out.push(`${esc(a)}: aliased to ${esc(state.aliases[a])}`);
         else if (COMMANDS[a]?.builtin) out.push(`${esc(a)}: shell built-in command`);
-        else if (COMMANDS[a]) out.push(`/usr/bin/${esc(a)}`);
+        else if (installed(a)) out.push(`/usr/bin/${esc(a)}`);
         else err(`${a} not found`);
     }
     return out;
@@ -619,34 +760,76 @@ function cmdHistory({ args }) {
     return state.history.map((h, i) => `${String(i + 1).padStart(width)}  ${esc(h)}`);
 }
 
-function cmdPs({ args }) {
-    const rows = [['1', '?', '00:00:02', 'systemd']];
-    if (args.length) {
-        rows.push(
-            ['412', '?', '00:01:37', 'Hyprland'],
-            ['433', '?', '00:00:12', 'waybar'],
-            ['501', '?', '00:00:04', 'infra-eye --agentless'],
-            ['666', '?', '00:00:00', 'curiosity --never-stop'],
-        );
+async function authenticate(prompt) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        const pw = await ask(prompt, true);
+        if (state.abort) return false;
+        if (pw === NEOX_PASSWORD) return true;
+        await sleep(900);
+        if (attempt < 3) print('Sorry, try again.');
     }
-    rows.push(['1337', 'pts/0', '00:00:00', 'nsh'], ['1338', 'pts/0', '00:00:00', 'ps']);
-    return ['    PID TTY          TIME CMD', ...rows.map(([pid, tty, time, cmd]) => `${pid.padStart(7)} ${tty.padEnd(8)} ${time} ${esc(cmd)}`)];
+    journal('sudo', `${state.user} : 3 incorrect password attempts ; TTY=pts/0 ; PWD=${state.cwd} ; USER=root`);
+    err('sudo: 3 incorrect password attempts');
+    return false;
 }
 
-async function cmdSudo({ args }) {
-    if (!args.length) return err('usage: sudo command');
-    await ask(`[sudo] password for ${USER}: `, true);
-    await sleep(600);
-    err(`${USER} is not in the sudoers file. This incident will be reported.`);
+async function cmdSudo({ args, stdin, piped }) {
+    if (!args.length) return err('usage: sudo [-i | -s | -l | -k] [command [arg ...]]');
+    if (args[0] === '-k') {
+        state.sudoUntil = 0;
+        return;
+    }
+    if (state.user === GUEST) {
+        await ask(`[sudo] password for ${GUEST}: `, true);
+        if (state.abort) return;
+        await sleep(600);
+        journal('sudo', `${GUEST} : user NOT in sudoers ; TTY=pts/0 ; PWD=${state.cwd} ; USER=root ; COMMAND=${args.join(' ')}`);
+        return err(`${GUEST} is not in the sudoers file. This incident will be reported.`);
+    }
+    if (!isRoot() && Date.now() > state.sudoUntil) {
+        if (!(await authenticate(`[sudo] password for ${state.user}: `))) return;
+        state.sudoUntil = Date.now() + 5 * 60 * 1000;
+    }
+    const [first, ...rest] = args;
+    if (first === '-l') return [`User ${esc(state.user)} may run the following commands on ${HOST}:`, '    (ALL : ALL) ALL'];
+    journal('sudo', `${state.user} : TTY=pts/0 ; PWD=${state.cwd} ; USER=root ; COMMAND=${args.join(' ')}`);
+    if (['-i', '-s', 'su', 'bash', 'sh', 'nsh'].includes(first) && rest.every((a) => a === '-')) {
+        pushUser('root', first !== '-s');
+        return;
+    }
+    const prev = state.user;
+    setUser('root');
+    try {
+        return await exec(args, stdin, piped);
+    } finally {
+        if (state.user === 'root') setUser(prev);
+    }
 }
 
-async function cmdSu() {
-    await ask('Password: ', true);
-    await sleep(1200);
-    err('su: Authentication failure');
+async function cmdSu({ args }) {
+    const login = args.some((a) => ['-', '-l', '--login'].includes(a));
+    const target = args.find((a) => !a.startsWith('-')) || 'root';
+    if (!USERS[target]) return err(`su: user ${target} does not exist or the user entry does not contain all the required fields`);
+    if (!isRoot() && target !== GUEST) {
+        const pw = await ask('Password: ', true);
+        if (state.abort) return;
+        await sleep(800);
+        // root's account is locked (see /etc/shadow), so only neox's password ever works here.
+        if (target === 'root' || pw !== NEOX_PASSWORD) {
+            journal('su', `pam_unix(su:auth): authentication failure; logname=${state.user} tty=pts/0 user=${target}`);
+            return err('su: Authentication failure');
+        }
+    }
+    journal('su', `(to ${target}) ${state.user} on pts/0`);
+    pushUser(target, login);
 }
 
 async function cmdExit() {
+    if (state.sessions.length) {
+        print('logout');
+        popUser();
+        return;
+    }
     print('logout');
     await sleep(300);
     print(['', c('dim', `Connection to ${HOST} closed. Press any key to log in again.`)]);
@@ -655,14 +838,15 @@ async function cmdExit() {
     await login(false);
 }
 
+function reboot() {
+    sessionStorage.removeItem('nsh_booted');
+    location.reload();
+}
+
 async function cmdReboot() {
-    state.skip = false;
-    output.innerHTML = '';
-    print(c('dim', 'Broadcast message from root@neox: The system will reboot now!'));
+    print(c('dim', `Broadcast message from ${state.user}@${HOST}: The system will reboot now!`));
     await sleep(700);
-    resetSession();
-    await boot();
-    await login(true);
+    reboot();
 }
 
 async function cmdShutdown() {
@@ -674,7 +858,51 @@ async function cmdShutdown() {
     output.innerHTML = '';
     print(c('dim', 'System halted. Press any key to power on.'));
     await waitKey();
-    await cmdReboot();
+    reboot();
+}
+
+// What happens when root deletes the system (or kills init). A reboot restores everything.
+async function meltdown(fromRm = true) {
+    state.skip = false;
+    if (fromRm) {
+        const victims = [];
+        (function walk(node, path) {
+            for (const [n, child] of Object.entries(node.children)) {
+                const p = `${path}/${n}`;
+                if (child.type === 'dir') walk(child, p);
+                victims.push(`removed ${child.type === 'dir' ? 'directory ' : ''}'${p}'`);
+            }
+        })(FS, '');
+        for (const v of victims) {
+            print(esc(v));
+            await sleep(10);
+        }
+    }
+    FS.children = {};
+    await sleep(800);
+    const t = (Date.now() - BOOT_TIME) / 1000;
+    const stamp = (i) => `[${(t + i * 0.000013).toFixed(6).padStart(12)}]`;
+    const panic = 'Kernel panic - not syncing: Attempted to kill init! exitcode=0x00007f00';
+    print([
+        panic,
+        `CPU: 0 UID: 0 PID: 1 Comm: systemd Not tainted ${KERNEL} #1`,
+        'Hardware name: Cloudflare Edge/NeoxOS, BIOS 1.1',
+        'Call Trace:',
+        ' <TASK>',
+        ' dump_stack_lvl+0x5d/0x80',
+        ' panic+0x118/0x2e0',
+        ' do_exit.cold+0x15/0x15',
+        ' do_group_exit+0x2d/0x90',
+        ' __x64_sys_exit_group+0x18/0x20',
+        ' do_syscall_64+0x82/0x190',
+        ' entry_SYSCALL_64_after_hwframe+0x76/0x7e',
+        ' </TASK>',
+        'Kernel Offset: disabled',
+        `---[ end ${panic} ]---`,
+    ].map((l, i) => c('err', esc(`${stamp(i)} ${l}`))));
+    print(['', c('dim', 'Well, you had root. Press any key to reboot.')]);
+    await waitKey();
+    reboot();
 }
 
 const FORTUNES = [
@@ -685,6 +913,7 @@ const FORTUNES = [
     'It works on my machine.\n    — every developer, ever',
     'Without music, life would be a mistake.\n    — Friedrich Nietzsche',
     'Make it work, make it right, make it fast.\n    — Kent Beck',
+    'With great power comes great responsibility.\n    — /etc/sudoers.d/lecture',
 ];
 
 function cmdCowsay({ args, stdin }) {
@@ -706,9 +935,6 @@ function cmdCowsay({ args, stdin }) {
     ];
 }
 
-const editor = ({ name }) => err(`${name}: this is a read-only session for visitors — try 'cat' instead (and :q! gets you out of vim).`);
-const notRoot = ({ name }) => err(`${name === 'yay' ? 'yay' : 'error'}: you cannot perform this operation unless you are root.`);
-
 const COMMANDS = {
     ls: { group: 'Files', usage: 'ls [-la1] [FILE...]', desc: 'list directory contents', run: cmdLs },
     cd: { group: 'Files', usage: 'cd [DIR | - | ~]', desc: 'change the working directory', builtin: true, run: cmdCd },
@@ -722,6 +948,7 @@ const COMMANDS = {
     touch: { group: 'Files', usage: 'touch FILE...', desc: 'change file timestamps or create empty files', run: cmdTouch },
     mkdir: { group: 'Files', usage: 'mkdir [-p] DIR...', desc: 'make directories', run: cmdMkdir },
     rm: { group: 'Files', usage: 'rm [-rf] FILE...', desc: 'remove files or directories', run: cmdRm },
+    chmod: { group: 'Files', usage: 'chmod MODE FILE...', desc: 'change file mode bits (chmod +x script.sh)', run: cmdChmod },
     open: { group: 'Files', usage: 'open URL | ~/links/NAME', desc: 'open a link in the browser (alias: xdg-open)', run: cmdOpen },
     'xdg-open': { group: 'Hidden', usage: 'xdg-open URL', desc: 'open a link in the browser', run: cmdOpen },
     echo: { group: 'Shell', usage: 'echo [STRING...]', desc: 'display a line of text', builtin: true, run: ({ args }) => [linkify(esc(args.filter((a) => a !== '-n' && a !== '-e').join(' ')))] },
@@ -730,6 +957,10 @@ const COMMANDS = {
     export: { group: 'Shell', usage: 'export NAME=VALUE...', desc: 'set environment variables', builtin: true, run: cmdExport },
     env: { group: 'Shell', usage: 'env', desc: 'print the environment', run: cmdEnv },
     history: { group: 'Shell', usage: 'history [-c]', desc: 'display or clear the command history', builtin: true, run: cmdHistory },
+    source: { group: 'Shell', usage: 'source FILE', desc: 'execute commands from a file in the current shell', builtin: true, run: cmdSource },
+    '.': { group: 'Hidden', usage: '. FILE', desc: 'execute commands from a file in the current shell', builtin: true, run: cmdSource },
+    sh: { group: 'Hidden', usage: 'sh FILE', desc: 'run a shell script', run: cmdShell },
+    bash: { group: 'Hidden', usage: 'bash FILE', desc: 'run a shell script', run: cmdShell },
     which: { group: 'Shell', usage: 'which COMMAND...', desc: 'locate a command', run: cmdWhich },
     type: { group: 'Hidden', usage: 'type COMMAND...', desc: 'describe a command', builtin: true, run: cmdWhich },
     man: { group: 'Shell', usage: 'man COMMAND', desc: 'an interface to the system reference manuals', run: cmdMan },
@@ -737,38 +968,26 @@ const COMMANDS = {
     clear: { group: 'Shell', usage: 'clear', desc: 'clear the terminal screen', run: () => { output.innerHTML = ''; } },
     neofetch: { group: 'System', usage: 'neofetch', desc: 'show system information (and who runs this box)', run: cmdNeofetch },
     fastfetch: { group: 'Hidden', usage: 'fastfetch', desc: 'show system information', run: cmdNeofetch },
-    whoami: { group: 'System', usage: 'whoami', desc: 'print effective user name', run: () => [USER] },
-    id: { group: 'System', usage: 'id', desc: 'print user and group IDs', run: () => [`uid=1001(${USER}) gid=1001(${USER}) groups=1001(${USER}),100(users)`] },
+    whoami: { group: 'System', usage: 'whoami', desc: 'print effective user name', run: () => [state.user] },
+    id: { group: 'System', usage: 'id', desc: 'print user and group IDs', run: () => {
+        const { uid, groups } = USERS[state.user];
+        return [`uid=${uid}(${state.user}) gid=${uid}(${state.user}) groups=${groups}`];
+    } },
     hostname: { group: 'System', usage: 'hostname', desc: 'show the system host name', run: () => [HOST] },
     uname: { group: 'System', usage: 'uname [-a]', desc: 'print system information', run: ({ args }) => [args.includes('-a') ? `Linux ${HOST} ${KERNEL} #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux` : args.includes('-r') ? KERNEL : 'Linux'] },
     date: { group: 'System', usage: 'date', desc: 'print the system date and time', run: () => [fmtDate(new Date())] },
-    uptime: { group: 'System', usage: 'uptime', desc: 'tell how long the system has been running', run: () => [` ${new Date().toTimeString().slice(0, 8)} up ${fmtUptime()},  1 user,  load average: 0.13, 0.08, 0.02`] },
-    ps: { group: 'System', usage: 'ps [aux]', desc: 'report a snapshot of the current processes', run: cmdPs },
-    sudo: { group: 'System', usage: 'sudo COMMAND', desc: 'execute a command as another user', run: cmdSudo },
-    su: { group: 'Hidden', usage: 'su [USER]', desc: 'run a shell with substitute user ID', run: cmdSu },
-    pacman: { group: 'Hidden', usage: 'pacman OPERATION', desc: 'package manager utility', run: notRoot },
-    yay: { group: 'Hidden', usage: 'yay', desc: 'AUR helper', run: notRoot },
-    exit: { group: 'System', usage: 'exit', desc: 'log out of the shell', builtin: true, run: cmdExit },
+    sudo: { group: 'System', usage: 'sudo [-i | -l] COMMAND', desc: 'execute a command as root', run: cmdSudo },
+    su: { group: 'System', usage: 'su [-] [USER]', desc: 'run a shell as another user', run: cmdSu },
+    exit: { group: 'System', usage: 'exit', desc: 'leave the current shell', builtin: true, run: cmdExit },
     logout: { group: 'Hidden', usage: 'logout', desc: 'log out of the shell', builtin: true, run: cmdExit },
-    reboot: { group: 'System', usage: 'reboot', desc: 'reboot the machine', run: cmdReboot },
+    reboot: { group: 'System', usage: 'reboot', desc: 'reboot the machine (restores everything)', run: cmdReboot },
     shutdown: { group: 'System', usage: 'shutdown', desc: 'power off the machine', run: cmdShutdown },
     poweroff: { group: 'Hidden', usage: 'poweroff', desc: 'power off the machine', run: cmdShutdown },
     true: { group: 'Hidden', usage: 'true', desc: 'do nothing, successfully', run: () => {} },
     false: { group: 'Hidden', usage: 'false', desc: 'do nothing, unsuccessfully', run: () => { state.status = 1; } },
     fortune: { group: 'Fun', usage: 'fortune', desc: 'print a random, hopefully interesting, adage', run: () => FORTUNES[Math.floor(Math.random() * FORTUNES.length)].split('\n').map(esc) },
     cowsay: { group: 'Fun', usage: 'cowsay [MESSAGE]', desc: 'configurable speaking cow', run: cmdCowsay },
-    vim: { group: 'Hidden', desc: 'Vi IMproved', run: editor },
-    vi: { group: 'Hidden', desc: 'screen-oriented text editor', run: editor },
-    nvim: { group: 'Hidden', desc: 'Neovim', run: editor },
-    nano: { group: 'Hidden', desc: 'Nano\'s ANOther editor', run: editor },
-    emacs: { group: 'Hidden', desc: 'a pretty good operating system lacking a decent editor', run: editor },
 };
-// Populate /bin and /usr/bin with an entry per command so `ls /bin` looks right.
-for (const name of Object.keys(COMMANDS)) {
-    if (COMMANDS[name].builtin) continue;
-    FS.children.bin.children[name] = { type: 'file', exe: true, content: '\x7fELF' + '\0'.repeat(28) };
-}
-FS.children.usr.children.bin = FS.children.bin;
 
 // ---------- parsing & execution ----------
 
@@ -794,6 +1013,7 @@ function tokenize(line) {
     while (i < line.length) {
         const ch = line[i];
         const two = line.slice(i, i + 2);
+        const tilde = ch === '~' && !cur && line.slice(i).match(/^~([a-z_][\w-]*)?(?=[\s/;|&>]|$)/);
         if (/\s/.test(ch)) {
             push();
             i++;
@@ -832,9 +1052,9 @@ function tokenize(line) {
             const [val, next] = readVar(i);
             word().value += val;
             i = next;
-        } else if (ch === '~' && !cur && (i + 1 === line.length || /[\s/]/.test(line[i + 1]))) {
-            word().value += HOME;
-            i++;
+        } else if (tilde) {
+            word().value += expandTilde(tilde[0]);
+            i += tilde[0].length;
         } else {
             if (ch === '*' || ch === '?') word().glob = true;
             word().value += ch;
@@ -889,6 +1109,22 @@ function expandGlob(t) {
     return matches.length ? matches.map((n) => dirPart + n) : [t.value];
 }
 
+// Running a path: binaries in /bin dispatch to their command, executable files run as scripts.
+async function execPath(path, args, stdin, piped) {
+    const abs = normalize(path);
+    const node = getNode(abs);
+    if (!node) {
+        state.status = 127;
+        return print(c('err', esc(`nsh: no such file or directory: ${path}`)));
+    }
+    if (node.type === 'dir' || isForbidden(abs) || !node.exe) {
+        state.status = 126;
+        return print(c('err', esc(`nsh: ${node.type === 'dir' ? 'is a directory' : 'permission denied'}: ${path}`)));
+    }
+    if (node.bin) return exec([basename(abs), ...args], stdin, piped, new Set([basename(abs)]));
+    await runScript(node.content);
+}
+
 async function exec(argv, stdin, piped, seen = new Set()) {
     const [name, ...args] = argv;
     if (Object.hasOwn(state.aliases, name) && !seen.has(name)) {
@@ -896,19 +1132,15 @@ async function exec(argv, stdin, piped, seen = new Set()) {
         const expanded = tokenize(state.aliases[name]).filter((t) => t.type === 'word').flatMap(expandGlob);
         return exec([...expanded, ...args], stdin, piped, seen);
     }
-    const cmd = Object.hasOwn(COMMANDS, name) ? COMMANDS[name] : null;
+    if (name.includes('/')) return (await execPath(name, args, stdin, piped)) || [];
+    const cmd = Object.hasOwn(COMMANDS, name) && installed(name) ? COMMANDS[name] : null;
     if (!cmd) {
         state.status = 127;
-        if (name.includes('/')) {
-            const node = getNode(normalize(name));
-            print(c('err', esc(`nsh: ${node ? 'permission denied' : 'no such file or directory'}: ${name}`)));
-            return [];
-        }
-        const guess = Object.keys(COMMANDS).find((k) => editDistance(k, name) === 1);
+        const guess = Object.keys(COMMANDS).find((k) => editDistance(k, name) === 1 && installed(k));
         print(c('err', esc(`nsh: command not found: ${name}`)) + (guess ? c('dim', ` — did you mean '${guess}'?`) : ''));
         return [];
     }
-    if (args.includes('--help')) return cmdMan({ args: [name] });
+    if (args.includes('--help')) return cmdMan({ args: [name], piped: true });
     state.status = 0;
     try {
         return (await cmd.run({ name, args, stdin, piped })) || [];
@@ -931,15 +1163,12 @@ function editDistance(a, b) {
 
 function redirect({ path, append }, lines) {
     const abs = normalize(path);
-    const parentAbs = parentOf(abs);
-    const parent = getNode(parentAbs);
+    const parent = getNode(parentOf(abs));
     const text = lines.length ? lines.map(toText).join('\n') + '\n' : '';
     if (parent?.type !== 'dir') return err(`nsh: no such file or directory: ${path}`);
-    const existing = parent.children[basename(abs)];
-    if (existing?.type === 'dir') return err(`nsh: is a directory: ${path}`);
-    if (!canModify(parentAbs, existing)) return err(`nsh: permission denied: ${path}`);
-    if (existing && append) existing.content += text;
-    else parent.children[basename(abs)] = { type: 'file', content: text, owner: USER, mtime: new Date() };
+    if (getNode(abs)?.type === 'dir') return err(`nsh: is a directory: ${path}`);
+    if (!canModify(abs)) return err(`nsh: permission denied: ${path}`);
+    writeFile(abs, text, append);
 }
 
 async function runPipeline(cmds) {
@@ -970,6 +1199,34 @@ async function runLine(line) {
         if (state.abort) return;
     }
 }
+
+// ---------- full-screen apps ----------
+
+// Takes over the window like a real TUI (less, htop, vim...). Resolves when the app closes.
+function runApp(app) {
+    return new Promise((resolve) => {
+        const handle = {
+            onKey: (e) => app.onKey?.(e, close),
+            onClick: (e) => app.onClick?.(e, close),
+        };
+        function close() {
+            if (state.app !== handle) return;
+            state.app = null;
+            app.cleanup?.();
+            screenEl.hidden = true;
+            screenEl.className = '';
+            screenEl.innerHTML = '';
+            resolve();
+        }
+        state.app = handle;
+        screenEl.hidden = false;
+        screenEl.className = app.className || '';
+        screenEl.innerHTML = '';
+        app.init(screenEl, close);
+    });
+}
+
+screenEl.addEventListener('click', (e) => state.app?.onClick(e));
 
 // ---------- input handling ----------
 
@@ -1026,9 +1283,12 @@ async function submit() {
     state.lastTab = null;
 
     state.abort = false;
+    state.skip = false;
     setBusy(true);
+    setTitle(line.trim());
     await runLine(line);
     setBusy(false);
+    setTitle();
     updatePrompt();
     terminal.scrollTop = terminal.scrollHeight;
 }
@@ -1060,7 +1320,7 @@ function complete() {
 
     let candidates;
     if (isCommand) {
-        candidates = [...new Set([...Object.keys(COMMANDS), ...Object.keys(state.aliases)])]
+        candidates = [...new Set([...Object.keys(COMMANDS).filter(installed), ...Object.keys(state.aliases)])]
             .filter((n) => n.startsWith(word))
             .sort()
             .map((n) => ({ text: n, label: c('exe', esc(n)), suffix: ' ' }));
@@ -1068,8 +1328,9 @@ function complete() {
         const slash = word.lastIndexOf('/');
         const dirPart = word.slice(0, slash + 1);
         const base = word.slice(slash + 1);
-        const node = getNode(normalize(dirPart || '.'));
-        if (!node || node.type !== 'dir') return;
+        const dirAbs = normalize(dirPart || '.');
+        const node = getNode(dirAbs);
+        if (!node || node.type !== 'dir' || isForbidden(dirAbs)) return;
         candidates = Object.keys(node.children)
             .filter((n) => n.startsWith(base) && (base.startsWith('.') || !n.startsWith('.')))
             .sort()
@@ -1105,6 +1366,7 @@ document.addEventListener('keydown', (e) => {
         state.keyWaiter = null;
         return resolve();
     }
+    if (state.app) return state.app.onKey(e);
     if (state.booting) {
         state.skip = true;
         return;
@@ -1115,6 +1377,7 @@ document.addEventListener('keydown', (e) => {
         if (window.getSelection().toString()) return; // let the browser copy
         e.preventDefault();
         if (state.busy) {
+            if (state.abort) return;
             state.abort = true;
             state.skip = true;
             if (state.pending) {
@@ -1124,7 +1387,10 @@ document.addEventListener('keydown', (e) => {
                 print(esc(label) + '^C');
                 inputLine.hidden = true;
                 resolve('');
+            } else {
+                print('^C');
             }
+            state.status = 130;
             return;
         }
         print(promptHtml() + esc(input.value) + '^C');
@@ -1158,12 +1424,6 @@ document.addEventListener('keydown', (e) => {
         e.preventDefault();
         input.value = input.value.slice(input.selectionStart);
         input.setSelectionRange(0, 0);
-    } else if (ctrl && e.key === 'w') {
-        e.preventDefault();
-        const pos = input.selectionStart;
-        const before = input.value.slice(0, pos).replace(/\S+\s*$/, '');
-        input.value = before + input.value.slice(pos);
-        input.setSelectionRange(before.length, before.length);
     } else if (ctrl && e.key === 'a') {
         e.preventDefault();
         input.setSelectionRange(0, 0);
@@ -1200,7 +1460,9 @@ const BOOT_UNITS = [
 ];
 
 function resetSession() {
-    state.cwd = state.env.PWD = state.env.OLDPWD = HOME;
+    state.sessions = [];
+    setUser(GUEST, true);
+    state.env.OLDPWD = HOME;
     state.status = 0;
 }
 
@@ -1219,12 +1481,12 @@ async function boot() {
     }
     await sleep(300);
     output.innerHTML = '';
-    print([`NeoxOS 1.0 ${HOST} tty1`, '']);
+    print([`NeoxOS 1.1 ${HOST} tty1`, '']);
     const loginLine = document.createElement('div');
     loginLine.className = 'line';
     loginLine.textContent = `${HOST} login: `;
     output.appendChild(loginLine);
-    for (const ch of USER) {
+    for (const ch of GUEST) {
         await sleep(90);
         loginLine.textContent += ch;
     }
@@ -1240,13 +1502,22 @@ async function login(clear) {
     const last = localStorage.getItem('nsh_last_login');
     if (last) print(`Last login: ${fmtDate(new Date(last))} from 127.0.0.1 on pts/0`);
     localStorage.setItem('nsh_last_login', new Date().toISOString());
+    journal('systemd-logind', `New session 1 of user ${GUEST}.`);
     print(['', ...BANNER.split('\n').map((l) => c('banner', esc(l))), '']);
     print(renderText(getNode('/etc/motd').content));
     updatePrompt();
+    setTitle();
     setBusy(false);
 }
 
-(async () => {
+// Runs once every script has registered its commands.
+document.addEventListener('DOMContentLoaded', async () => {
+    // /bin holds a binary per command, so `ls /bin` looks right and deleting one really removes it.
+    for (const [name, cmd] of Object.entries(COMMANDS)) {
+        if (!cmd.builtin) FS.children.bin.children[name] = { type: 'file', exe: true, bin: true, content: '\x7fELF\x02\x01\x01' + '\0'.repeat(25) };
+    }
+    FS.children.usr.children.bin = FS.children.bin;
+
     if (sessionStorage.getItem('nsh_booted')) {
         await login(true);
     } else {
@@ -1254,4 +1525,4 @@ async function login(clear) {
         sessionStorage.setItem('nsh_booted', '1');
         await login(false);
     }
-})();
+});
