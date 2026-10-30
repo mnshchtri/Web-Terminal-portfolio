@@ -97,6 +97,7 @@ It's a real-feeling Linux box, so poke at it:
 It's a desktop too (Alt stands in for Super):
   Alt+Enter terminal · Alt+B Chromium · Alt+E Files · Alt+M Neox Music
   Alt+Shift+N VS Code (this site's own source) · Alt+Shift+O Obsidian (my notes)
+  Alt+G Neox Arcade: Packet Snake, Firewall, Riff Runner · bruteforce · games
   Alt+Space launcher · Alt+Shift+Space backgrounds · Alt+Ctrl+Space next one
   wallpaper list · chromium wiki.archlinux.org · nautilus ~/projects
 
@@ -382,7 +383,8 @@ alias la='ls -a'
 alias ..='cd ..'
 PS1='\\u@\\h:\\w\\$ '
 `),
-            // The world-readable history file is the intended way in: neox piped a password into sudo.
+            // The world-readable history file is the way in. The password is base64-encoded here,
+            // so visitors have to spot the encoding and decode it with `base64 -d`.
             '.bash_history': file(`
 ls -la
 cd ~/projects
@@ -392,7 +394,9 @@ docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/mnshchtri/infr
 helm upgrade --install cyberlynx ./chart -n security
 nmap -sV -p- 10.0.0.12
 journalctl -u wazuh-agent -f
-echo 'Tr1murt1@neox' | sudo -S systemctl restart wazuh-agent
+export WAZUH_PASS=$(echo 'QnI0aG00LVYxc2hudS1TaDF2NA==' | base64 -d)
+echo "$WAZUH_PASS" | sudo -S systemctl restart wazuh-agent
+unset WAZUH_PASS
 history -c
 vim ~/.bashrc
 neofetch

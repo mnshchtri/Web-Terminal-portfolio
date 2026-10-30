@@ -14,6 +14,7 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `style.css` — layout and the colour themes (`win-palette` is my current Omarchy theme).
 - `gui.js` — graphical apps: Chromium, Files, Text Editor, Image Viewer (imv), Neox Music, and the background switcher.
 - `vscode.js` — VS Code: explorer, tabs, syntax highlighting, search, source control with live commits, quick open (Ctrl+P) and an integrated `nsh` terminal (Ctrl+\`). Opens this site's own source in `~/code/Web-Terminal-portfolio`.
+- `games.js` — Neox Arcade, three original retro games on a pixel canvas (Packet Snake, Firewall, Riff Runner) with chiptune sound and saved high scores, plus `bruteforce`, a code-breaking game for the terminal.
 - `obsidian.js` — Obsidian with the public **Neox Vault** (`~/Documents/Neox Vault`): wikilinks, backlinks, tags, search and the graph view. The notes are written in this file.
 - `assets/` — `wallpapers/` (the 31 backgrounds from my Omarchy themes, plus thumbnails) and `wallpaper.jpg` (terminal background).
 
@@ -26,6 +27,7 @@ Alt stands in for Super, which the OS or browser keeps for itself.
 | Alt+Space | Launcher (or click the logo) |
 | Alt+B / Alt+E / Alt+M | Chromium / Files / Neox Music |
 | Alt+Shift+N / Alt+Shift+O | VS Code / Obsidian |
+| Alt+G | Neox Arcade (games) |
 | Alt+Shift+Space | Background switcher (or the image icon in the bar) |
 | Alt+Ctrl+Space | Next background |
 | Alt+W | Close window (or `exit`) |
@@ -39,4 +41,6 @@ Alt stands in for Super, which the OS or browser keeps for itself.
 No build step — open `index.html` or push to deploy.
 
 ## The root challenge
-Visitors start as `visitor` with no sudo rights. The intended path: enumerate users, find neox's password leaked in the world-readable `~neox/.bash_history`, `su neox`, then `sudo -i` and read `/root/flag.txt`. The password is `NEOX_PASSWORD` in `script.js` and must match the history file. `reboot` resets everything.
+Visitors start as `visitor` with no sudo rights, and there's a flag in `/root/flag.txt`. Getting it takes real Linux privilege-escalation thinking. Reading this source won't hand you the password: only its SHA-256 is stored. Stuck? Run `hint` in the shell, once per nudge. `reboot` resets everything.
+
+To change the password, set `NEOX_PASSWORD_SHA256` in `script.js` (`printf %s 'new-pass' | sha256sum`) and update the base64-encoded leak in `fs.js` to match.

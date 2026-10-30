@@ -264,7 +264,7 @@ async function cmdSystemctl({ args }) {
         const pw = await ask('Password: ', true);
         if (state.abort) return;
         await sleep(700);
-        if (pw !== NEOX_PASSWORD) {
+        if (!isNeoxPassword(pw)) {
             print(c('err', '==== AUTHENTICATION FAILED ===='));
             return err(`Failed to ${verb} ${name}.service: Access denied`);
         }
@@ -775,6 +775,7 @@ const HINTS = [
     `There's a flag in ${c('y', '/root')}, and you're a guest without sudo. Start the way every pentest starts: enumeration. Who else has an account here? (${c('exe', 'cat /etc/passwd')}, ${c('exe', 'cat /etc/group')})`,
     `Look at neox's home properly — dotfiles too. (${c('exe', 'ls -la ~neox')})`,
     "Shell history is a goldmine. People paste passwords into commands they shouldn't.",
+    `That string doesn't look like a password because it's encoded. The \`=\` padding at the end is a giveaway: try ${c('exe', "echo '…' | base64 -d")}.`,
     `Found a password? Become its owner (${c('exe', 'su neox')}), then ask what that user may run (${c('exe', 'sudo -l')}).`,
     `${c('exe', 'sudo -i')}, then ${c('exe', 'cat /root/flag.txt')}. Root's own history is worth a read too... carefully.`,
 ];

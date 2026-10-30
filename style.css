@@ -1011,6 +1011,24 @@ a:hover { text-decoration-style: solid; }
 .ob-tiny .ob-left { display: none; }
 .ob-tiny .ob-note { padding: 16px 18px 60px; }
 
+/* ---------- Neox Arcade ---------- */
+
+.win.gui.arcade { background: #000; opacity: 1; }
+
+.arcade-stage {
+    display: grid;
+    place-items: center;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.arcade-stage canvas {
+    image-rendering: pixelated;
+    touch-action: none;
+    box-shadow: 0 0 0 1px #1a2130, 0 0 40px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 /* ---------- background switcher ---------- */
 
 #picker {

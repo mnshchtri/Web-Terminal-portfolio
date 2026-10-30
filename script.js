@@ -13,8 +13,43 @@ const KERNEL = '6.17.0-neox';
 const BOOT_TIME = Date.now();
 const BUILD_DATE = new Date(document.lastModified);
 
-// neox's password. It leaks in /home/neox/.bash_history — finding it is the privilege-escalation puzzle.
-const NEOX_PASSWORD = 'Tr1murt1@neox';
+// Only the SHA-256 of neox's password lives in the code, so reading the source doesn't give it away.
+// Finding the real thing is the privilege-escalation puzzle (run `hint` in the shell).
+const NEOX_PASSWORD_SHA256 = '5519c2f0d725a4549c75f848120932742028780ff853794eab288c40a59e173b';
+
+// Plain-JS SHA-256: crypto.subtle is unavailable when the page is opened from file://.
+function sha256(text) {
+    const rotr = (v, n) => (v >>> n) | (v << (32 - n));
+    const primes = [];
+    for (let n = 2; primes.length < 64; n++) if (primes.every((p) => n % p)) primes.push(n);
+    const frac = (x) => ((x - Math.floor(x)) * 0x100000000) | 0;
+    const K = primes.map((p) => frac(Math.cbrt(p)));
+    let H = primes.slice(0, 8).map((p) => frac(Math.sqrt(p)));
+    const bytes = [...new TextEncoder().encode(text)];
+    const bitLen = bytes.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    for (let i = 7; i >= 0; i--) bytes.push(i >= 4 ? 0 : (bitLen >>> (i * 8)) & 0xff);
+    for (let off = 0; off < bytes.length; off += 64) {
+        const w = [];
+        for (let i = 0; i < 16; i++) w[i] = (bytes[off + 4 * i] << 24) | (bytes[off + 4 * i + 1] << 16) | (bytes[off + 4 * i + 2] << 8) | bytes[off + 4 * i + 3];
+        for (let i = 16; i < 64; i++) {
+            const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+            const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+            w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+        }
+        let [a, b, c, d, e, f, g, h] = H;
+        for (let i = 0; i < 64; i++) {
+            const t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+            const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+            [h, g, f, e, d, c, b, a] = [g, f, e, (d + t1) | 0, c, b, a, (t1 + t2) | 0];
+        }
+        H = H.map((v, i) => (v + [a, b, c, d, e, f, g, h][i]) | 0);
+    }
+    return H.map((v) => (v >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
+const isNeoxPassword = (pw) => sha256(pw) === NEOX_PASSWORD_SHA256;
 
 const USERS = {
     root: { uid: 0, home: '/root', groups: '0(root)' },
@@ -516,6 +551,48 @@ function cmdWc({ args, stdin }) {
     });
 }
 
+// Input for filters: the named files, or stdin when there are none.
+function filterInput(cmd, files, stdin) {
+    if (!files.length) return stdin ?? '';
+    const texts = files.map((f) => readFile(f, cmd));
+    return texts.includes(undefined) ? null : texts.join('');
+}
+
+function cmdBase64({ args, stdin }) {
+    const decode = args.some((a) => a === '-d' || a === '--decode');
+    const text = filterInput('base64', args.filter((a) => !a.startsWith('-')), stdin);
+    if (text == null) return;
+    const bytes = (s) => Uint8Array.from(s, (ch) => ch.charCodeAt(0));
+    if (decode) {
+        try {
+            return textLines(new TextDecoder().decode(bytes(atob(text.replace(/\s+/g, ''))))).map(esc);
+        } catch {
+            return err('base64: invalid input');
+        }
+    }
+    const encoded = btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+    return (encoded.match(/.{1,76}/g) || ['']).map(esc);
+}
+
+function cmdSha256sum({ args, stdin }) {
+    const files = args.filter((a) => !a.startsWith('-'));
+    if (!files.length) return [`${sha256(stdin ?? '')}  -`];
+    return files.map((f) => {
+        const text = readFile(f, 'sha256sum');
+        return text == null ? null : `${sha256(text)}  ${esc(f)}`;
+    }).filter(Boolean);
+}
+
+function cmdEcho({ args }) {
+    const noNewline = args[0] === '-n';
+    const text = args.filter((a) => a !== '-n' && a !== '-e').join(' ');
+    if (noNewline && !text) return [];
+    const out = [linkify(esc(text))];
+    // `echo -n` matters when piping into hashes: echo -n pw | sha256sum.
+    out.noNewline = noNewline;
+    return out;
+}
+
 function cmdTouch({ args }) {
     if (!args.length) return err('touch: missing file operand');
     for (const p of args) {
@@ -772,7 +849,7 @@ async function authenticate(prompt) {
     for (let attempt = 1; attempt <= 3; attempt++) {
         const pw = await ask(prompt, true);
         if (state.abort) return false;
-        if (pw === NEOX_PASSWORD) return true;
+        if (isNeoxPassword(pw)) return true;
         await sleep(900);
         if (attempt < 3) print('Sorry, try again.');
     }
@@ -823,7 +900,7 @@ async function cmdSu({ args }) {
         if (state.abort) return;
         await sleep(800);
         // root's account is locked (see /etc/shadow), so only neox's password ever works here.
-        if (target === 'root' || pw !== NEOX_PASSWORD) {
+        if (target === 'root' || !isNeoxPassword(pw)) {
             journal('su', `pam_unix(su:auth): authentication failure; logname=${state.user} tty=pts/0 user=${target}`);
             return err('su: Authentication failure');
         }
@@ -951,13 +1028,15 @@ const COMMANDS = {
     tail: { group: 'Files', usage: 'tail [-n N] [FILE...]', desc: 'output the last part of files', run: headTail(true) },
     grep: { group: 'Files', usage: 'grep [-icnvrh] PATTERN [FILE...]', desc: 'print lines that match patterns', run: cmdGrep },
     wc: { group: 'Files', usage: 'wc [-lwc] [FILE...]', desc: 'print newline, word, and byte counts', run: cmdWc },
+    base64: { group: 'Files', usage: 'base64 [-d] [FILE]', desc: 'base64 encode/decode data and print to standard output', run: cmdBase64 },
+    sha256sum: { group: 'Files', usage: 'sha256sum [FILE...]', desc: 'compute SHA-256 message digests', run: cmdSha256sum },
     touch: { group: 'Files', usage: 'touch FILE...', desc: 'change file timestamps or create empty files', run: cmdTouch },
     mkdir: { group: 'Files', usage: 'mkdir [-p] DIR...', desc: 'make directories', run: cmdMkdir },
     rm: { group: 'Files', usage: 'rm [-rf] FILE...', desc: 'remove files or directories', run: cmdRm },
     chmod: { group: 'Files', usage: 'chmod MODE FILE...', desc: 'change file mode bits (chmod +x script.sh)', run: cmdChmod },
     open: { group: 'Files', usage: 'open URL | ~/links/NAME', desc: 'open a link in the browser (alias: xdg-open)', run: cmdOpen },
     'xdg-open': { group: 'Hidden', usage: 'xdg-open URL', desc: 'open a link in the browser', run: cmdOpen },
-    echo: { group: 'Shell', usage: 'echo [STRING...]', desc: 'display a line of text', builtin: true, run: ({ args }) => [linkify(esc(args.filter((a) => a !== '-n' && a !== '-e').join(' ')))] },
+    echo: { group: 'Shell', usage: 'echo [-n] [STRING...]', desc: 'display a line of text', builtin: true, run: cmdEcho },
     alias: { group: 'Shell', usage: 'alias [NAME[=VALUE]...]', desc: 'define or display aliases', builtin: true, run: cmdAlias },
     unalias: { group: 'Hidden', usage: 'unalias NAME...', desc: 'remove aliases', builtin: true, run: ({ args }) => args.forEach((a) => delete state.aliases[a]) },
     export: { group: 'Shell', usage: 'export NAME=VALUE...', desc: 'set environment variables', builtin: true, run: cmdExport },
@@ -1170,7 +1249,7 @@ function editDistance(a, b) {
 function redirect({ path, append }, lines) {
     const abs = normalize(path);
     const parent = getNode(parentOf(abs));
-    const text = lines.length ? lines.map(toText).join('\n') + '\n' : '';
+    const text = lines.length ? lines.map(toText).join('\n') + (lines.noNewline ? '' : '\n') : '';
     if (parent?.type !== 'dir') return err(`nsh: no such file or directory: ${path}`);
     if (getNode(abs)?.type === 'dir') return err(`nsh: is a directory: ${path}`);
     if (!canModify(abs)) return err(`nsh: permission denied: ${path}`);
@@ -1185,7 +1264,7 @@ async function runPipeline(cmds) {
         const out = await exec(words.flatMap(expandGlob), stdin, !last || !!redir);
         if (redir) redirect(redir, out);
         if (last && !redir) print(out);
-        stdin = redir ? '' : out.map(toText).join('\n') + (out.length ? '\n' : '');
+        stdin = redir ? '' : out.map(toText).join('\n') + (out.length && !out.noNewline ? '\n' : '');
         if (state.abort) return;
     }
 }
