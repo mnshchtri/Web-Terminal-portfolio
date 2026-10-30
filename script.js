@@ -1,14 +1,11 @@
 'use strict';
 
 // nsh — a small bash-like shell over the virtual filesystem in fs.js.
-// apps.js adds full-screen programs (less, htop, vim...), sys.js adds system tools, the bar and themes.
+// apps.js adds full-screen programs (less, htop, vim...), sys.js adds system tools and themes,
+// desktop.js runs the Hyprland-style desktop that hosts one shell per terminal window.
 
-const terminal = document.getElementById('terminal');
-const output = document.getElementById('output');
-const inputLine = document.getElementById('input-line');
-const promptEl = document.getElementById('prompt');
-const input = document.getElementById('user-input');
-const screenEl = document.getElementById('screen');
+// The focused terminal's elements and session. desktop.js rebinds these when focus moves.
+let terminal, output, inputLine, promptEl, input, screenEl;
 
 const GUEST = 'visitor';
 const HOST = 'neox';
@@ -57,14 +54,22 @@ const LOGO = String.raw`
 \`++:.                           \`-/+/
 .\`                                 \`/`.slice(1).replace(/\\`/g, '`').split('\n');
 
-const state = {
+// Shared by every terminal, like ~/.bash_history and the system journal.
+const shared = {
+    history: JSON.parse(localStorage.getItem('nsh_history') || '[]'),
+    journal: [],
+    booting: false,
+    hintsSeen: 0,
+};
+
+const newSession = () => ({
     user: GUEST,
     sessions: [],   // users we su'd from, so `exit` can return to them
     sudoUntil: 0,   // sudo caches the password for a few minutes, like the real thing
     cwd: HOME,
     env: {
         USER: GUEST, LOGNAME: GUEST, HOME, HOSTNAME: HOST, SHELL: '/bin/nsh',
-        TERM: 'xterm-256color', LANG: 'en_US.UTF-8', EDITOR: 'nvim',
+        TERM: 'xterm-ghostty', LANG: 'en_US.UTF-8', EDITOR: 'nvim',
         PATH: '/usr/local/bin:/usr/bin:/bin', PWD: HOME, OLDPWD: HOME,
     },
     aliases: {
@@ -81,7 +86,6 @@ const state = {
         music: 'cat ~neox/music/README.txt',
         blogs: 'ls -l ~neox/links/medium',
     },
-    history: JSON.parse(localStorage.getItem('nsh_history') || '[]'),
     histIndex: null,
     draft: '',
     status: 0,
@@ -93,8 +97,10 @@ const state = {
     keyWaiter: null,
     lastTab: null,
     app: null,
-    journal: [],
-};
+    exited: false,
+});
+
+let state = newSession();
 
 // ---------- output helpers ----------
 
@@ -130,7 +136,7 @@ function err(msg) {
 }
 
 function journal(unit, msg) {
-    state.journal.push({ time: new Date(), unit, msg });
+    shared.journal.push({ time: new Date(), unit, msg });
 }
 
 const isRoot = () => state.user === 'root';
@@ -265,6 +271,7 @@ function readFile(path, cmd) {
     if (!node) return err(`${cmd}: ${path}: No such file or directory`);
     if (isForbidden(abs)) return err(`${cmd}: ${path}: Permission denied`);
     if (node.type === 'dir') return err(`${cmd}: ${path}: Is a directory`);
+    node.onRead?.();
     return node.type === 'link' ? node.target + '\n' : node.content;
 }
 
@@ -654,7 +661,8 @@ function cmdNeofetch() {
         kv('Resolution', `${screen.width}x${screen.height}`),
         kv('WM', 'Hyprland'),
         kv('Theme', currentTheme()),
-        kv('Terminal', 'web-tty'),
+        kv('Terminal', 'ghostty (web)'),
+        kv('Font', 'JetBrainsMono Nerd Font'),
         kv('CPU', `${navigator.hardwareConcurrency || '?'} cores`),
         '',
         kv('Name', 'Manish Karki (Neox)'),
@@ -752,12 +760,12 @@ function cmdEnv() {
 
 function cmdHistory({ args }) {
     if (args[0] === '-c') {
-        state.history = [];
+        shared.history = [];
         localStorage.removeItem('nsh_history');
         return;
     }
-    const width = String(state.history.length).length + 2;
-    return state.history.map((h, i) => `${String(i + 1).padStart(width)}  ${esc(h)}`);
+    const width = String(shared.history.length).length + 2;
+    return shared.history.map((h, i) => `${String(i + 1).padStart(width)}  ${esc(h)}`);
 }
 
 async function authenticate(prompt) {
@@ -824,18 +832,15 @@ async function cmdSu({ args }) {
     pushUser(target, login);
 }
 
-async function cmdExit() {
+function cmdExit() {
     if (state.sessions.length) {
         print('logout');
         popUser();
         return;
     }
-    print('logout');
-    await sleep(300);
-    print(['', c('dim', `Connection to ${HOST} closed. Press any key to log in again.`)]);
-    await waitKey();
-    resetSession();
-    await login(false);
+    // desktop.js closes the window once the command line finishes.
+    state.exited = true;
+    state.abort = true;
 }
 
 function reboot() {
@@ -850,7 +855,7 @@ async function cmdReboot() {
 }
 
 async function cmdShutdown() {
-    output.innerHTML = '';
+    enterTty();
     for (const s of ['Stopping user session...', 'Unmounting /home...', 'Reached target System Power Off.']) {
         print(`[  ${c('ok', 'OK')}  ] ${s}`);
         await sleep(250);
@@ -880,6 +885,7 @@ async function meltdown(fromRm = true) {
     }
     FS.children = {};
     await sleep(800);
+    enterTty();
     const t = (Date.now() - BOOT_TIME) / 1000;
     const stamp = (i) => `[${(t + i * 0.000013).toFixed(6).padStart(12)}]`;
     const panic = 'Kernel panic - not syncing: Attempted to kill init! exitcode=0x00007f00';
@@ -1214,19 +1220,52 @@ function runApp(app) {
             state.app = null;
             app.cleanup?.();
             screenEl.hidden = true;
-            screenEl.className = '';
+            screenEl.className = 'screen';
             screenEl.innerHTML = '';
             resolve();
         }
         state.app = handle;
         screenEl.hidden = false;
-        screenEl.className = app.className || '';
+        screenEl.className = `screen ${app.className || ''}`;
         screenEl.innerHTML = '';
         app.init(screenEl, close);
     });
 }
 
-screenEl.addEventListener('click', (e) => state.app?.onClick(e));
+// ---------- terminal instances ----------
+
+function createShell(container) {
+    container.innerHTML = `<div class="term"><div class="output" aria-live="polite"></div>
+        <div class="input-line" hidden><span class="prompt"></span><input type="text" class="user-input" autocomplete="off"
+        autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Terminal input"></div></div>
+        <div class="screen" hidden></div>`;
+    const sh = {
+        session: newSession(),
+        terminal: container.querySelector('.term'),
+        output: container.querySelector('.output'),
+        inputLine: container.querySelector('.input-line'),
+        promptEl: container.querySelector('.prompt'),
+        input: container.querySelector('.user-input'),
+        screenEl: container.querySelector('.screen'),
+    };
+    sh.screenEl.addEventListener('click', (e) => sh.session.app?.onClick(e));
+    sh.terminal.addEventListener('click', () => {
+        if (state !== sh.session) return;
+        if (state.keyWaiter) {
+            const resolve = state.keyWaiter;
+            state.keyWaiter = null;
+            return resolve();
+        }
+        if (shared.booting) state.skip = true;
+        if (!window.getSelection().toString() && !inputLine.hidden) input.focus();
+    });
+    return sh;
+}
+
+function bindShell(sh) {
+    ({ terminal, output, inputLine, promptEl, input, screenEl } = sh || {});
+    state = sh ? sh.session : null;
+}
 
 // ---------- input handling ----------
 
@@ -1269,15 +1308,15 @@ async function submit() {
     print(promptHtml() + esc(raw));
     let line = raw;
     if (line.includes('!!')) {
-        const last = state.history.at(-1);
+        const last = shared.history.at(-1);
         if (!last) return err('nsh: !!: event not found');
         line = line.replaceAll('!!', last);
         print(esc(line));
     }
-    if (line.trim() && line !== state.history.at(-1)) {
-        state.history.push(line);
-        state.history = state.history.slice(-500);
-        localStorage.setItem('nsh_history', JSON.stringify(state.history));
+    if (line.trim() && line !== shared.history.at(-1)) {
+        shared.history.push(line);
+        shared.history = shared.history.slice(-500);
+        localStorage.setItem('nsh_history', JSON.stringify(shared.history));
     }
     state.histIndex = null;
     state.lastTab = null;
@@ -1291,10 +1330,11 @@ async function submit() {
     setTitle();
     updatePrompt();
     terminal.scrollTop = terminal.scrollHeight;
+    afterCommand(state);
 }
 
 function browseHistory(dir) {
-    const h = state.history;
+    const h = shared.history;
     if (!h.length) return;
     if (state.histIndex === null) {
         if (dir > 0) return;
@@ -1360,6 +1400,7 @@ function complete() {
 }
 
 document.addEventListener('keydown', (e) => {
+    if (!state) return;
     if (state.keyWaiter) {
         e.preventDefault();
         const resolve = state.keyWaiter;
@@ -1367,7 +1408,7 @@ document.addEventListener('keydown', (e) => {
         return resolve();
     }
     if (state.app) return state.app.onKey(e);
-    if (state.booting) {
+    if (shared.booting) {
         state.skip = true;
         return;
     }
@@ -1437,16 +1478,6 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-terminal.addEventListener('click', () => {
-    if (state.keyWaiter) {
-        const resolve = state.keyWaiter;
-        state.keyWaiter = null;
-        return resolve();
-    }
-    if (state.booting) state.skip = true;
-    if (!window.getSelection().toString() && !inputLine.hidden) input.focus();
-});
-
 // ---------- boot & login ----------
 
 const BOOT_UNITS = [
@@ -1459,15 +1490,8 @@ const BOOT_UNITS = [
     'Reached target Multi-User System', 'Started Getty on tty1', 'Reached target Graphical Interface',
 ];
 
-function resetSession() {
-    state.sessions = [];
-    setUser(GUEST, true);
-    state.env.OLDPWD = HOME;
-    state.status = 0;
-}
-
 async function boot() {
-    state.booting = true;
+    shared.booting = true;
     state.skip = false;
     inputLine.hidden = true;
     output.innerHTML = '';
@@ -1493,21 +1517,20 @@ async function boot() {
     await sleep(250);
     print('Password: ');
     await sleep(400);
-    state.booting = false;
+    print(['', c('dim', 'Starting Hyprland...')]);
+    await sleep(500);
+    shared.booting = false;
     state.skip = false;
 }
 
-async function login(clear) {
-    if (clear) output.innerHTML = '';
+// The greeting printed in the first terminal after login.
+function greet() {
     const last = localStorage.getItem('nsh_last_login');
     if (last) print(`Last login: ${fmtDate(new Date(last))} from 127.0.0.1 on pts/0`);
     localStorage.setItem('nsh_last_login', new Date().toISOString());
     journal('systemd-logind', `New session 1 of user ${GUEST}.`);
     print(['', ...BANNER.split('\n').map((l) => c('banner', esc(l))), '']);
     print(renderText(getNode('/etc/motd').content));
-    updatePrompt();
-    setTitle();
-    setBusy(false);
 }
 
 // Runs once every script has registered its commands.
@@ -1518,11 +1541,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     FS.children.usr.children.bin = FS.children.bin;
 
-    if (sessionStorage.getItem('nsh_booted')) {
-        await login(true);
-    } else {
+    bindShell(createShell(document.getElementById('tty')));
+    if (!sessionStorage.getItem('nsh_booted')) {
         await boot();
         sessionStorage.setItem('nsh_booted', '1');
-        await login(false);
     }
+    startDesktop();
 });

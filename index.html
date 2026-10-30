@@ -4,30 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>visitor@neox: ~ | Manish Karki (Neox)</title>
-    <meta name="description" content="Manish Karki (Neox) — DevSecOps Engineer & offensive security. A Linux terminal portfolio: ls, cd, cat your way around, then try to get root.">
-    <script>document.documentElement.dataset.theme = localStorage.getItem('nsh_theme') || 'tokyo-night';</script>
+    <meta name="description" content="Manish Karki (Neox) — DevSecOps Engineer & offensive security. A Linux desktop portfolio: tile terminals, cat your way around, then try to get root.">
+    <script>document.documentElement.dataset.theme = localStorage.getItem('nsh_theme') || 'win-palette';</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header id="bar"></header>
-    <div id="window">
-        <main id="terminal">
-            <div id="output" aria-live="polite"></div>
-            <div id="input-line" hidden>
-                <span id="prompt"></span>
-                <input type="text" id="user-input" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Terminal input">
-            </div>
-            <noscript>NeoxOS needs JavaScript to boot. Try: https://github.com/mnshchtri</noscript>
-        </main>
-        <div id="screen" hidden></div>
-    </div>
+    <div id="tty"></div>
+    <header id="bar" hidden></header>
+    <main id="desktop" hidden></main>
+    <div id="launcher" hidden></div>
+    <div id="notifications" aria-live="polite"></div>
+    <div id="screensaver" hidden></div>
+    <noscript>NeoxOS needs JavaScript to boot. Try: https://github.com/mnshchtri</noscript>
 
     <script src="fs.js"></script>
     <script src="script.js"></script>
     <script src="apps.js"></script>
     <script src="sys.js"></script>
+    <script src="desktop.js"></script>
 </body>
 </html>

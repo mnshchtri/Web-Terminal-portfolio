@@ -64,9 +64,9 @@ FS.children.proc = {
     },
 };
 
-// ---------- themes & top bar ----------
+// ---------- themes ----------
 
-const THEMES = ['tokyo-night', 'catppuccin', 'gruvbox', 'nord', 'everforest', 'rose-pine', 'matrix'];
+const THEMES = ['win-palette', 'tokyo-night', 'catppuccin', 'gruvbox', 'nord', 'everforest', 'rose-pine', 'matrix'];
 const currentTheme = () => (THEMES.includes(document.documentElement.dataset.theme) ? document.documentElement.dataset.theme : THEMES[0]);
 
 function cmdTheme({ args }) {
@@ -80,47 +80,6 @@ function cmdTheme({ args }) {
     localStorage.setItem('nsh_theme', name);
     return [`Theme set to ${c('hl', name)}`];
 }
-
-const bar = document.getElementById('bar');
-bar.innerHTML = `
-    <div class="bar-left">${[1, 2, 3, 4, 5].map((n) => `<span class="ws${n === 1 ? ' active' : ''}">${n}</span>`).join('')}<span class="bar-title"></span></div>
-    <button class="bar-clock" data-cmd="cal"></button>
-    <div class="bar-right">
-        <button data-cmd="theme next" class="bar-theme"></button>
-        <button data-cmd="htop" class="bar-cpu"></button>
-        <button data-cmd="free -h" class="bar-mem"></button>
-        <button data-cmd="ip a" class="bar-net"></button>
-        <span class="bar-bat"></span>
-        <button data-cmd="whoami" class="bar-user"></button>
-    </div>`;
-
-let battery = null;
-navigator.getBattery?.().then((b) => { battery = b; }).catch(() => {});
-
-function updateBar() {
-    const now = new Date();
-    const $ = (sel) => bar.querySelector(sel);
-    $('.bar-title').textContent = document.title;
-    $('.bar-clock').textContent = `${now.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}  ${now.toTimeString().slice(0, 5)}`;
-    $('.bar-theme').textContent = `◐ ${currentTheme()}`;
-    $('.bar-cpu').textContent = `cpu ${Math.round(SYS.cpuAvg())}%`;
-    $('.bar-mem').textContent = `mem ${Math.round((SYS.memUsed() / SYS.memTotal) * 100)}%`;
-    $('.bar-net').textContent = navigator.onLine ? 'wlan0' : 'offline';
-    $('.bar-bat').textContent = battery ? `bat ${Math.round(battery.level * 100)}%${battery.charging ? '+' : ''}` : '';
-    $('.bar-user').textContent = state.user;
-    $('.bar-user').classList.toggle('root', isRoot());
-}
-setInterval(updateBar, 1000);
-new MutationObserver(updateBar).observe(document.querySelector('title'), { childList: true });
-updateBar();
-
-// Clicking a bar module types its command into the shell, so the bar doubles as a guide.
-bar.addEventListener('click', (e) => {
-    const cmd = e.target.closest('[data-cmd]')?.dataset.cmd;
-    if (!cmd || state.busy || state.app || state.booting || inputLine.hidden) return;
-    input.value = cmd;
-    submit();
-});
 
 // ---------- system info ----------
 
@@ -254,6 +213,7 @@ const UNITS = {
     'infra-eye': { desc: 'InfraEye agentless collector', pid: 700, bin: '/usr/bin/infra-eye --agentless' },
     iwd: { desc: 'Wireless service', pid: 380, bin: '/usr/lib/iwd/iwd' },
     nftables: { desc: 'Netfilter Tables', oneshot: true },
+    bluetooth: { desc: 'Bluetooth service', pid: 395, bin: '/usr/lib/bluetooth/bluetoothd' },
     'systemd-journald': { desc: 'Journal Service', pid: 312, bin: '/usr/lib/systemd/systemd-journald' },
 };
 for (const unit of Object.values(UNITS)) unit.active = true;
@@ -324,7 +284,7 @@ function cmdJournalctl({ args, piped }) {
     const fmt = (t) => `${fmtTime(t).slice(0, 6)} ${t.toTimeString().slice(0, 8)}`;
     const entries = [
         ...BOOT_UNITS.map((u, i) => ({ time: new Date(BOOT_TIME - (BOOT_UNITS.length - i) * 90), unit: 'systemd', msg: `${u}.` })),
-        ...state.journal,
+        ...shared.journal,
     ].filter((e) => privileged || e.unit === 'systemd-logind')
         .filter((e) => !unitFilter || e.unit === unitFilter || e.msg.toLowerCase().includes(UNITS[unitFilter]?.desc.toLowerCase() ?? unitFilter));
     const lines = entries.map((e) => `${c('dim', fmt(e.time))} ${HOST} ${c('p', esc(e.unit))}[${e.unit === 'systemd' ? 1 : 1300 + (e.msg.length % 90)}]: ${esc(e.msg)}`);
@@ -821,7 +781,7 @@ const HINTS = [
 
 function cmdHint() {
     if (isRoot()) return [`You're already root. ${c('exe', 'cat /root/flag.txt')} 🏁`];
-    const n = Math.min(state.hintsSeen = (state.hintsSeen || 0) + 1, HINTS.length);
+    const n = Math.min(shared.hintsSeen += 1, HINTS.length);
     return [`${c('hl', `hint ${n}/${HINTS.length}:`)} ${HINTS[n - 1]}`];
 }
 
