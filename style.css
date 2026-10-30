@@ -1077,6 +1077,125 @@ a:hover { text-decoration-style: solid; }
 .picker-item.current span::after { content: '  ●'; color: var(--accent); }
 .picker-item.sel, .picker-item:hover { border-color: var(--accent); }
 
+/* ---------- résumé (resume.js) ---------- */
+
+.bar-hire {
+    padding: 1px 10px !important;
+    border: 1px solid var(--accent) !important;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+    color: var(--fg) !important;
+    font-weight: 700 !important;
+}
+
+.bar-hire:hover { background: var(--accent) !important; color: var(--black) !important; }
+
+.win.gui.resume { background: #e9ebef; opacity: 1; }
+
+.cv-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--inactive-border);
+}
+
+.cv-bar-gap { flex: 1; }
+.cv-primary { border-color: var(--accent) !important; background: var(--accent) !important; color: var(--black) !important; }
+
+.cv-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 18px;
+}
+
+.cv {
+    box-sizing: border-box;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 34px 42px;
+    background: #fff;
+    color: #1d2330;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18);
+    font: 13.5px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.cv a { color: #1f5fc9; text-decoration: none; }
+.cv a:hover { text-decoration: underline; }
+.cv h1 { margin: 0; font-size: 26px; letter-spacing: -0.01em; }
+.cv-alias { color: #6a7385; font-weight: 400; }
+.cv-title { margin: 2px 0 6px; color: #1f5fc9; font-weight: 600; }
+.cv-contact { margin: 0; color: #4a5263; font-size: 12.5px; }
+.cv-head { padding-bottom: 12px; border-bottom: 2px solid #1d2330; }
+.cv h2 { margin: 16px 0 6px; color: #1d2330; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
+.cv p { margin: 0 0 6px; }
+.cv ul { margin: 2px 0 8px; padding-left: 18px; }
+.cv li { margin: 1px 0; }
+.cv-job { margin-bottom: 8px; }
+.cv-row { display: flex; justify-content: space-between; gap: 12px; }
+.cv-row span { color: #6a7385; font-size: 12.5px; white-space: nowrap; }
+.cv-url { font-size: 12px; }
+.cv-skills { display: grid; grid-template-columns: 110px 1fr; gap: 2px 12px; margin: 0; }
+.cv-skills dt { font-weight: 600; }
+.cv-skills dd { margin: 0; }
+.cv-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+
+@media (max-width: 700px) {
+    .cv { padding: 20px 18px; }
+    .cv-scroll { padding: 0; }
+    .cv-row { flex-direction: column; gap: 0; }
+    .cv-two, .cv-skills { grid-template-columns: 1fr; }
+    .cv-skills dt { margin-top: 4px; }
+}
+
+/* The plain summary in index.html: visible without JavaScript, for screen readers otherwise. */
+#about-static {
+    max-width: 720px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: var(--fg);
+    font: 15px/1.6 ui-sans-serif, system-ui, sans-serif;
+}
+
+#about-static a { color: var(--cyan); }
+
+.js #about-static {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+#print-root { display: none; }
+
+/* Without JavaScript only the plain summary shows. */
+html:not(.js) #tty { display: none; }
+html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
+
+@media print {
+    @page { size: A4; margin: 9mm 11mm; }
+    html, body { height: auto; overflow: visible; background: #fff !important; }
+    body > *:not(#print-root) { display: none !important; }
+    #print-root { display: block; }
+    #print-root .cv { max-width: none; padding: 0; box-shadow: none; font-size: 9pt; line-height: 1.3; }
+    #print-root .cv h1 { font-size: 19pt; }
+    #print-root .cv h2 { margin: 7px 0 2px; font-size: 8pt; break-after: avoid; }
+    #print-root .cv-head { padding-bottom: 7px; }
+    #print-root .cv ul { margin: 1px 0 4px; }
+    #print-root .cv p { margin: 0 0 3px; }
+    #print-root .cv-job { margin-bottom: 4px; }
+    #print-root .cv a { color: #1d2330; }
+    .cv-job, .cv-proj { break-inside: avoid; }
+}
+
 /* ---------- launcher (Walker-style) ---------- */
 
 #launcher {
@@ -1199,7 +1318,8 @@ a:hover { text-decoration-style: solid; }
     .win { border-width: 0; }
     #bar { gap: 10px; }
     .bar-wclock, .bar-kb, .bar-cava, .bar-weather, .ws:not(.active):not(.used),
-    #bar [data-cmd="theme next"], #bar [data-cmd^="systemctl"] { display: none; }
+    #bar [data-cmd="theme next"], #bar [data-cmd^="systemctl"], #bar [data-cmd="ip a"], .bar-bg, .bar-audio { display: none; }
+    .bar-right { flex-shrink: 0; }
     .neofetch .logo { display: none; }
     .nano-keys { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .places { display: none; }

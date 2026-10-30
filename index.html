@@ -3,9 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>visitor@neox: ~ | Manish Karki (Neox)</title>
-    <meta name="description" content="Manish Karki (Neox) — DevSecOps Engineer & offensive security. A Linux desktop portfolio: tile terminals, cat your way around, then try to get root.">
+    <title>Manish Karki (Neox) — DevSecOps Engineer | Linux desktop portfolio</title>
+    <meta name="description" content="Manish Karki (Neox): DevSecOps Engineer and offensive security practitioner in Kathmandu. Bare-metal Kubernetes, CI/CD, Zero Trust and pentesting, shown as a playable Linux desktop. Résumé one click away.">
+    <meta name="author" content="Manish Karki">
+    <meta name="theme-color" content="#0a0a0a">
+
+    <!-- Link previews (LinkedIn, X, WhatsApp, Slack…). The image is absolute so it works from any domain. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="NeoxOS">
+    <meta property="og:title" content="Manish Karki (Neox) — DevSecOps Engineer">
+    <meta property="og:description" content="A portfolio you can boot: tile terminals, browse my projects, play the arcade, then try to get root. Résumé one click away.">
+    <meta property="og:image" content="https://mnshchtri.github.io/Web-Terminal-portfolio/assets/og.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The NeoxOS desktop: tiled terminals showing Manish Karki's portfolio">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:creator" content="@N30xMnsh">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Manish Karki",
+        "alternateName": "Neox",
+        "jobTitle": "DevSecOps Engineer",
+        "worksFor": { "@type": "Organization", "name": "Citytech" },
+        "address": { "@type": "PostalAddress", "addressLocality": "Kathmandu", "addressCountry": "NP" },
+        "email": "mailto:mnshchtri@gmail.com",
+        "alumniOf": "Islington College (London Metropolitan University)",
+        "knowsAbout": ["DevSecOps", "Kubernetes", "Penetration testing", "Zero Trust", "Linux", "CI/CD", "Observability"],
+        "sameAs": [
+            "https://github.com/mnshchtri",
+            "https://www.linkedin.com/in/manish-karki-959107171/",
+            "https://manishkarki7.com.np",
+            "https://medium.com/@neox.exploit",
+            "https://x.com/N30xMnsh",
+            "https://www.youtube.com/@lynthrax"
+        ]
+    }
+    </script>
+
     <script>
+        document.documentElement.classList.add('js');
         document.documentElement.dataset.theme = localStorage.getItem('nsh_theme') || 'win-palette';
         // Apply the saved background before first paint (gui.js validates names when switching).
         {
@@ -19,13 +58,36 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- A plain summary for search engines, screen readers and anyone without JavaScript.
+         Keep it in step with RESUME in resume.js. -->
+    <section id="about-static">
+        <h1>Manish Karki (Neox)</h1>
+        <p>DevSecOps Engineer | Offensive Security · Kathmandu, Nepal · open to remote</p>
+        <p>I secure and operate bare-metal, fintech-grade infrastructure: self-hosted Kubernetes, Jenkins CI/CD, HAProxy and Nginx zero-downtime deployments, PostgreSQL and Zero Trust controls. Before that I was breaking things on purpose as an offensive security intern. I build open-source tooling, including InfraEye, an agentless observability platform.</p>
+        <h2>Experience</h2>
+        <ul>
+            <li>DevSecOps Engineer, Citytech (May 2026 – present)</li>
+            <li>Offensive Security Intern, InRED Labs (Jul – Oct 2025)</li>
+            <li>SOP Reviewer / IT Support, Uni Express (2023 – 2024)</li>
+            <li>IT Technician / SOP Reviewer, Yes International Education (2018 – 2021)</li>
+        </ul>
+        <h2>Projects</h2>
+        <ul>
+            <li><a href="https://github.com/mnshchtri/infra-eye">InfraEye</a>: agentless infrastructure observability for bare metal and Kubernetes</li>
+            <li><a href="https://github.com/mnshchtri/TrimurtiSec">TrimurtiSec</a>: penetration-testing framework</li>
+            <li><a href="https://github.com/mnshchtri/secaudit">secaudit</a>: security audit for Arch Linux / Omarchy</li>
+        </ul>
+        <h2>Contact</h2>
+        <p><a href="mailto:mnshchtri@gmail.com">mnshchtri@gmail.com</a> · <a href="https://github.com/mnshchtri">GitHub</a> · <a href="https://www.linkedin.com/in/manish-karki-959107171/">LinkedIn</a> · <a href="https://medium.com/@neox.exploit">Medium</a></p>
+        <noscript><p>This site is normally an interactive Linux desktop. Turn on JavaScript to boot it.</p></noscript>
+    </section>
+
     <div id="tty"></div>
     <header id="bar" hidden></header>
     <main id="desktop" hidden></main>
     <div id="launcher" hidden></div>
     <div id="notifications" aria-live="polite"></div>
     <div id="screensaver" hidden></div>
-    <noscript>NeoxOS needs JavaScript to boot. Try: https://github.com/mnshchtri</noscript>
 
     <script src="fs.js"></script>
     <script src="script.js"></script>
@@ -36,5 +98,6 @@
     <script src="vscode.js"></script>
     <script src="obsidian.js"></script>
     <script src="games.js"></script>
+    <script src="resume.js"></script>
 </body>
 </html>

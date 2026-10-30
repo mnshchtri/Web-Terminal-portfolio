@@ -87,6 +87,7 @@ This is my home directory. Look around like you would on any Linux box:
   open github                links live in ~/links
 
 Shortcuts: whois, experience, projects, skills, contact, music, blogs
+In a hurry? resume opens my one-page CV (or click Hire me in the bar).
 
 It's a real-feeling Linux box, so poke at it:
   htop · vim · nano · less · man · systemctl status infra-eye · journalctl

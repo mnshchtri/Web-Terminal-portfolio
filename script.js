@@ -1621,7 +1621,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     FS.children.usr.children.bin = FS.children.bin;
 
     bindShell(createShell(document.getElementById('tty')));
-    if (!sessionStorage.getItem('nsh_booted')) {
+    // Résumé links (#resume) skip the boot animation: recruiters shouldn't have to wait.
+    if (!sessionStorage.getItem('nsh_booted') && !/^#(resume|cv)$/i.test(location.hash)) {
         await boot();
         sessionStorage.setItem('nsh_booted', '1');
     }

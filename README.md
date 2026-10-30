@@ -3,6 +3,8 @@ A portfolio that behaves like my Linux desktop (Omarchy on Hyprland) — a boot 
 
 https://mnshchtri.github.io/Web-Terminal-portfolio/
 
+**Recruiters:** https://mnshchtri.github.io/Web-Terminal-portfolio/#resume skips the boot and opens my one-page CV (Download PDF is one click). On the desktop, it's the **Hire me** button in the top bar.
+
 Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-eye`, `weather`, `gh repo list`, `git clone https://github.com/mnshchtri/infra-eye`, `theme list` — or run `hint` and try to get root.
 
 ## Layout
@@ -14,8 +16,10 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `style.css` — layout and the colour themes (`win-palette` is my current Omarchy theme).
 - `gui.js` — graphical apps: Chromium, Files, Text Editor, Image Viewer (imv), Neox Music, and the background switcher.
 - `vscode.js` — VS Code: explorer, tabs, syntax highlighting, search, source control with live commits, quick open (Ctrl+P) and an integrated `nsh` terminal (Ctrl+\`). Opens this site's own source in `~/code/Web-Terminal-portfolio`.
+- `resume.js` — the résumé window, its print/PDF layout, the Hire me button and the `#resume` link. Its `RESUME` data follows my CV (without my phone number); the plain-HTML summary at the top of `index.html` is for search engines, screen readers and no-JavaScript visitors, so keep both in step.
 - `games.js` — Neox Arcade, seven original retro games on a pixel canvas: Packet Snake, Firewall (shooter), Riff Runner (runner), Night Shift (build by day, defend by night), Patch Panel (cable puzzle), Drone Drop (lander) and Fretwork (rhythm, with a backing band synthesised live) with chiptune sound and saved high scores, plus `bruteforce`, a code-breaking game for the terminal.
 - `obsidian.js` — Obsidian with the public **Neox Vault** (`~/Documents/Neox Vault`): wikilinks, backlinks, tags, search and the graph view. The notes are written in this file.
+- `assets/og.jpg` — the link-preview image (1200×630) used by LinkedIn, X, WhatsApp and Slack.
 - `assets/` — `wallpapers/` (the 31 backgrounds from my Omarchy themes, plus thumbnails) and `wallpaper.jpg` (terminal background).
 
 ## Keybindings

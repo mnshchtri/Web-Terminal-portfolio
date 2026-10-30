@@ -698,6 +698,9 @@ if (flag) flag.onRead = () => {
 
 // ---------- startup ----------
 
+// Later scripts (resume.js) can run code once the desktop is up.
+const desktopReadyHooks = [];
+
 function startDesktop() {
     ttyEl.hidden = true;
     ttyEl.innerHTML = '';
@@ -711,8 +714,10 @@ function startDesktop() {
     openTerminal();
     greet();
     resetIdle();
-    if (!sessionStorage.getItem('nsh_welcomed')) {
+    // Visitors arriving on a résumé link came for the CV, not the tour.
+    if (!sessionStorage.getItem('nsh_welcomed') && !/^#(resume|cv)$/i.test(location.hash)) {
         sessionStorage.setItem('nsh_welcomed', '1');
-        setTimeout(() => notify('Welcome to NeoxOS', 'Alt+Enter opens a terminal, Alt+Space the launcher, Alt+1–9 switches workspaces. Or click the logo.', 9000), 600);
+        setTimeout(() => notify('Welcome to NeoxOS', 'Looking for my CV? Click “Hire me” in the top bar. Otherwise: Alt+Enter opens a terminal, Alt+Space the launcher.', 9000), 600);
     }
+    desktopReadyHooks.forEach((hook) => hook());
 }
