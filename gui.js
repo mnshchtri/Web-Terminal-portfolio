@@ -191,14 +191,17 @@ function frameBlocked(url) {
 
 function browserApp(startUrl = START) {
     let addr;
-    let view;
-    let tab;
+    let views;
+    let strip;
     let backBtn;
     let fwdBtn;
-    const hist = [];
-    let pos = -1;
     let win;
-    const current = () => hist[pos] || START;
+    // Each tab keeps its own history and page, so switching tabs doesn't reload anything.
+    const tabs = [];
+    let active = null;
+    let view = null;
+    const current = (t = active) => t?.hist[t.pos] || START;
+    const tabLabel = (t) => (current(t) === START ? 'New Tab' : hostOf(current(t)));
 
     function startPage() {
         return `<div class="start">
@@ -228,6 +231,7 @@ function browserApp(startUrl = START) {
         } else {
             view.innerHTML = '<iframe class="local-frame" sandbox="allow-same-origin"></iframe>';
             const frame = view.firstElementChild;
+            const target = view;
             frame.srcdoc = page.doc;
             frame.addEventListener('load', () => {
                 const doc = frame.contentDocument;
@@ -237,11 +241,11 @@ function browserApp(startUrl = START) {
                     e.preventDefault();
                     go(new URL(a.getAttribute('href'), page.base || url).href);
                 });
-                // Keys pressed inside the page (Ctrl+U, Ctrl+L) reach the browser's own shortcuts.
+                // Keys pressed inside the page (Ctrl+U, Ctrl+T...) reach the browser's own shortcuts.
                 doc?.addEventListener('keydown', (e) => {
-                    if (!e.ctrlKey || !['u', 'l'].includes(e.key)) return;
+                    if (!e.ctrlKey || !['u', 'l', 't', 'w', 'Tab'].includes(e.key)) return;
                     e.preventDefault();
-                    view.dispatchEvent(new KeyboardEvent('keydown', { key: e.key, ctrlKey: true, bubbles: true }));
+                    target.dispatchEvent(new KeyboardEvent('keydown', { key: e.key, ctrlKey: true, shiftKey: e.shiftKey, bubbles: true }));
                 });
             });
         }
@@ -268,75 +272,133 @@ function browserApp(startUrl = START) {
             view.innerHTML = `<iframe src="${esc(url)}" referrerpolicy="no-referrer" allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                 sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"></iframe>`;
         }
-        addr.value = url === START ? '' : url;
-        tab.textContent = url === START ? 'New Tab' : hostOf(url);
-        backBtn.disabled = pos <= 0;
-        fwdBtn.disabled = pos >= hist.length - 1;
+        chrome();
+    }
+
+    // Updates everything around the page: tab strip, address bar, back/forward, window title.
+    function chrome() {
+        strip.innerHTML = tabs.map((t) => `<div class="tab${t === active ? ' active' : ''}" data-tab="${t.id}" title="${esc(tabLabel(t))}">
+            <span class="tab-title">${esc(tabLabel(t))}</span><button class="tab-close" data-close="${t.id}" title="Close tab (or middle-click)">×</button></div>`).join('');
+        const url = current();
+        if (document.activeElement !== addr) addr.value = url === START ? '' : url;
+        backBtn.disabled = active.pos <= 0;
+        fwdBtn.disabled = active.pos >= active.hist.length - 1;
         refreshTitle(win);
     }
 
     function go(url) {
         // Neox Music's channel page can't be framed, but its uploads playlist can.
         if (/youtube\.com\/@lynthrax/i.test(url)) url = NEOX_MUSIC;
-        hist.splice(pos + 1);
-        hist.push(url);
-        pos = hist.length - 1;
+        active.hist.splice(active.pos + 1);
+        active.hist.push(url);
+        active.pos = active.hist.length - 1;
+        addr.blur();
         render();
     }
+
+    function select(t) {
+        active = t;
+        view = t.view;
+        for (const x of tabs) x.view.hidden = x !== t;
+        chrome();
+        if (current() === START) view.querySelector('.start-search input')?.focus();
+    }
+
+    function newTab(url = START) {
+        const view = document.createElement('div');
+        view.className = 'view';
+        view.tabIndex = -1;
+        views.appendChild(view);
+        const t = { id: tabs.length ? Math.max(...tabs.map((x) => x.id)) + 1 : 1, hist: [], pos: -1, view };
+        tabs.splice(active ? tabs.indexOf(active) + 1 : tabs.length, 0, t);
+        select(t);
+        go(url);
+        if (url === START) view.querySelector('.start-search input')?.focus();
+    }
+
+    function closeTab(t) {
+        const i = tabs.indexOf(t);
+        tabs.splice(i, 1);
+        t.view.remove();
+        if (!tabs.length) return closeWindow(win);
+        if (t === active) select(tabs[Math.min(i, tabs.length - 1)]);
+        else chrome();
+    }
+
+    const byId = (id) => tabs.find((t) => t.id === Number(id));
 
     return {
         cls: 'chromium',
         title: () => `${current() === START ? 'New Tab' : hostOf(current())} - Chromium`,
         mount(el, w) {
             win = w;
-            el.innerHTML = `<div class="tabs"><span class="tab"><span class="tab-title"></span></span><button class="tab-new" title="New window">${G.plus}</button></div>
+            el.innerHTML = `<div class="tabs"><div class="tab-strip"></div><button class="tab-new" title="New tab">${G.plus}</button></div>
                 <div class="toolbar">
                     <button data-act="back" title="Back">${G.back}</button><button data-act="fwd" title="Forward">${G.fwd}</button>
                     <button data-act="reload" title="Reload">${G.reload}</button><button data-act="home" title="Home">${G.home}</button>
                     <input class="addr" spellcheck="false" autocomplete="off" placeholder="Search Wikipedia or type a URL">
                     <button data-act="ext" title="Open in a real browser tab">${G.ext}</button>
-                </div><div class="view"></div>`;
+                </div><div class="views"></div>`;
             addr = el.querySelector('.addr');
-            view = el.querySelector('.view');
-            view.tabIndex = -1;
-            tab = el.querySelector('.tab-title');
+            views = el.querySelector('.views');
+            strip = el.querySelector('.tab-strip');
             backBtn = el.querySelector('[data-act="back"]');
             fwdBtn = el.querySelector('[data-act="fwd"]');
             addr.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    go(resolveAddress(addr.value));
+                if (e.key === 'Enter') go(resolveAddress(addr.value));
+                if (e.key === 'Escape') {
+                    addr.value = current() === START ? '' : current();
                     addr.blur();
                 }
             });
             addr.addEventListener('focus', () => addr.select());
-            el.querySelector('.tab-new').addEventListener('click', () => openApp(browserApp()));
+            el.querySelector('.tab-new').addEventListener('click', () => newTab());
+            // Middle-click closes a tab, as in every browser.
+            strip.addEventListener('auxclick', (e) => {
+                const t = e.button === 1 && byId(e.target.closest('[data-tab]')?.dataset.tab);
+                if (t) closeTab(t);
+            });
+            strip.addEventListener('mousedown', (e) => e.button === 1 && e.preventDefault());
             el.addEventListener('click', (e) => {
+                const close = e.target.closest('[data-close]');
+                if (close) return closeTab(byId(close.dataset.close));
+                const tabEl = e.target.closest('[data-tab]');
+                if (tabEl) return select(byId(tabEl.dataset.tab));
                 const dial = e.target.closest('[data-url]');
                 if (dial) return go(dial.dataset.url);
                 const ext = e.target.closest('[data-open]');
                 if (ext) return window.open(ext.dataset.open, '_blank', 'noopener');
                 if (e.target.closest('.local-page')) return;
                 const act = e.target.closest('[data-act]')?.dataset.act;
-                if (act === 'back' && pos > 0) pos--;
-                if (act === 'fwd' && pos < hist.length - 1) pos++;
+                if (act === 'back' && active.pos > 0) active.pos--;
+                if (act === 'fwd' && active.pos < active.hist.length - 1) active.pos++;
                 if (act === 'home') return go(START);
                 if (act === 'ext') return window.open(current() === START || localSite(current()) ? 'https://github.com/mnshchtri' : current(), '_blank', 'noopener');
                 if (act) render();
             });
             el.addEventListener('keydown', (e) => {
-                if (e.ctrlKey && e.key === 'l') {
-                    e.preventDefault();
+                if (!e.ctrlKey || e.altKey || e.metaKey) return;
+                const key = e.key.toLowerCase();
+                if (key === 'l') {
                     addr.focus();
-                }
-                // Ctrl+U: view source, as in any browser (pages served from this box only).
-                if (e.ctrlKey && e.key === 'u') {
-                    e.preventDefault();
+                // Real Chrome and Brave keep Ctrl+T/W/Tab for themselves; these only fire where the page gets them.
+                } else if (key === 't') {
+                    newTab();
+                } else if (key === 'w') {
+                    closeTab(active);
+                } else if (e.key === 'Tab') {
+                    select(tabs[(tabs.indexOf(active) + (e.shiftKey ? -1 : 1) + tabs.length) % tabs.length]);
+                } else if (key === 'u') {
+                    // View source, as in any browser (pages served from this box only).
                     const url = current();
                     if (url.startsWith('view-source:')) go(url.slice(12));
                     else if (url !== START) go(`view-source:${url}`);
+                } else {
+                    return;
                 }
+                e.preventDefault();
             });
-            go(startUrl);
+            newTab(startUrl);
         },
         focus() {
             if (current() === START) (view.querySelector('.start-search input') || addr).focus();

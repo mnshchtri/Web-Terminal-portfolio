@@ -488,16 +488,31 @@ a:hover { text-decoration-style: solid; }
     background: color-mix(in srgb, var(--bg) 94%, #000);
 }
 
+.tab-strip { display: flex; align-items: end; gap: 2px; min-width: 0; overflow: hidden; }
+
 .tab {
-    max-width: 220px;
-    padding: 5px 14px;
-    overflow: hidden;
-    background: var(--panel);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 1 220px;
+    min-width: 60px;
+    padding: 5px 6px 5px 14px;
+    border-radius: 6px 6px 0 0;
+    color: var(--dim);
+    cursor: default;
+    user-select: none;
 }
 
-.tab-new { padding: 4px; color: var(--dim); }
+.tab:hover { background: color-mix(in srgb, var(--panel) 55%, transparent); }
+.tab.active { background: var(--panel); color: var(--fg); }
+.tab-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-close { flex-shrink: 0; width: 18px; height: 18px; padding: 0; border-radius: 50%; color: var(--dim); font-size: 14px; line-height: 1; }
+.tab-close:hover { background: var(--line); color: var(--fg); }
+
+.tab-new { flex-shrink: 0; padding: 4px; color: var(--dim); }
+
+.views { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.views > .view[hidden] { display: none; }
 
 .toolbar, .files-head, .ed-head, .music-head, .imv-bar {
     display: flex;
@@ -1450,7 +1465,6 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
     .neofetch .logo { display: none; }
     .nano-keys { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .places { display: none; }
-    .tabs { display: none; }
     .vs-side, .vs-act { display: none; }
 }
 
