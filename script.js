@@ -95,6 +95,8 @@ const shared = {
     journal: [],
     booting: false,
     hintsSeen: 0,
+    failStreak: 0,
+    guideTipShown: false,
 };
 
 const newSession = () => ({
@@ -769,7 +771,7 @@ function cmdHelp() {
         ...Object.entries(groups).flatMap(([g, names]) => [c('hl', g), row(names), '']),
         `Shell features: pipes ${c('y', '|')}, redirection ${c('y', '&gt; &gt;&gt;')}, ${c('y', '&amp;&amp; || ;')}, ${c('y', '$VARS')}, globs ${c('y', '*')}, ${c('y', '!!')}, scripts ${c('y', './x.sh')}`,
         `Keys: Tab completes, ↑/↓ history, Ctrl+L clear, Ctrl+C interrupt, Ctrl+A/E/U line editing`,
-        `Type ${c('exe', 'man &lt;command&gt;')} for details. New here? ${c('exe', 'cat README.md')}. Feeling brave? ${c('exe', 'ctf')}`,
+        `Type ${c('exe', 'man &lt;command&gt;')} for details. New here? ${c('exe', 'claude')} or ${c('exe', 'cat README.md')}. Feeling brave? ${c('exe', 'ctf')}`,
     ];
 }
 
@@ -1429,7 +1431,16 @@ async function submit() {
     setBusy(true);
     setTitle(line.trim());
     await runLine(line);
-    if (state.status !== 0 && line.trim()) playErrorSound();
+    if (state.status !== 0 && line.trim()) {
+        playErrorSound();
+        // Three misses in a row usually means someone is lost: point them at the guide, once.
+        if (++shared.failStreak === 3 && COMMANDS.claude && !shared.guideTipShown) {
+            shared.guideTipShown = true;
+            print(c('dim', `Lost? Type ${c('exe', 'claude')} and just ask, e.g. "what can I do here?"`));
+        }
+    } else {
+        shared.failStreak = 0;
+    }
     setBusy(false);
     setTitle();
     updatePrompt();
