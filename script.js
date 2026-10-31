@@ -906,7 +906,6 @@ async function cmdSu({ args }) {
         }
     }
     journal('su', `(to ${target}) ${state.user} on pts/0`);
-    if (target === 'neox') track('ctf-neox', 'Became neox');
     pushUser(target, login);
 }
 
@@ -1405,9 +1404,6 @@ async function submit() {
     state.skip = false;
     setBusy(true);
     setTitle(line.trim());
-    const first = line.trim().split(/\s+/)[0];
-    // Command names only, never arguments. Opting out (`analytics off`) is never itself reported.
-    if (first !== 'analytics' && (Object.hasOwn(COMMANDS, first) || Object.hasOwn(state.aliases, first))) track(`cmd-${first}`, `Ran ${first}`);
     await runLine(line);
     setBusy(false);
     setTitle();

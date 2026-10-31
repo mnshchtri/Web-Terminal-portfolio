@@ -448,10 +448,7 @@ function infraEyeApp(startPage = 'dashboard') {
             el.addEventListener('click', (e) => {
                 const t = e.target;
                 const open = t.closest('[data-open]');
-                if (open) {
-                    track(`out-${open.dataset.open.includes('github') ? 'infraeye-github' : 'infraeye-site'}`);
-                    return void window.open(open.dataset.open, '_blank', 'noopener');
-                }
+                if (open) return void window.open(open.dataset.open, '_blank', 'noopener');
                 const p = t.closest('[data-page]');
                 if (p) return go(p.dataset.page);
                 const askBtn = t.closest('[data-ask]');
@@ -463,7 +460,6 @@ function infraEyeApp(startPage = 'dashboard') {
                 }
                 if (t.closest('[data-act="incident"]') && !ieFleet.incident) {
                     ieFleet.incident = { step: 0 };
-                    track('infraeye-incident', 'Simulated an InfraEye incident');
                     ieLog('info', 'Simulation: a traffic spike hits web-01…');
                     render();
                 }

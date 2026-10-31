@@ -93,7 +93,6 @@ function resumeHtml() {
 
 // Printing copies the CV to a top-level element so the print stylesheet can hide the desktop.
 function printResume() {
-    track('resume-pdf', 'Downloaded CV');
     let root = document.getElementById('print-root');
     if (!root) {
         root = document.createElement('div');
@@ -129,12 +128,8 @@ function resumeApp() {
             </div><div class="cv-scroll">${resumeHtml()}</div>`;
             el.addEventListener('click', async (e) => {
                 const open = e.target.closest('[data-open]');
-                if (open) {
-                    track(`contact-${open.textContent.trim().toLowerCase()}`);
-                    return void window.open(open.dataset.open, '_blank', 'noopener');
-                }
+                if (open) return void window.open(open.dataset.open, '_blank', 'noopener');
                 const act = e.target.closest('[data-act]')?.dataset.act;
-                if (act === 'mail' || act === 'copy') track('contact-email', 'Email from CV');
                 if (act === 'pdf') printResume();
                 if (act === 'mail') location.href = `mailto:${RESUME.email}?subject=${encodeURIComponent('Hello from your portfolio')}`;
                 if (act === 'copy') {
@@ -179,10 +174,7 @@ function openResume({ fromCommand, maximise } = {}) {
 // ---------- bar button, launcher, commands, deep link ----------
 
 barEl.querySelector('.bar-right').insertAdjacentHTML('afterbegin', '<button class="bar-hire" title="Résumé & contact">Hire me</button>');
-barEl.querySelector('.bar-hire').addEventListener('click', () => {
-    track('hire-click', 'Clicked Hire me');
-    openResume();
-});
+barEl.querySelector('.bar-hire').addEventListener('click', () => openResume());
 
 LAUNCH.splice(1, 0, { name: 'Résumé / CV', hint: 'Hire me', action: () => openResume() });
 
@@ -200,7 +192,5 @@ Object.assign(COMMANDS, {
 // A link ending in #resume (or #cv) skips the boot and opens the résumé, for job applications.
 const RESUME_LINK = /^#(resume|cv)$/i.test(location.hash);
 desktopReadyHooks.push(() => {
-    if (!RESUME_LINK) return;
-    track('resume-link', 'Arrived on a #resume link');
-    openResume({ maximise: true });
+    if (RESUME_LINK) openResume({ maximise: true });
 });
