@@ -2,8 +2,9 @@
 
 // `claude`: an assistant in Claude Code's clothes. The UI follows Claude Code (welcome box, bordered
 // input, spinner, ● replies, ● Bash(...) tool calls with ⎿ output, slash commands). Underneath it is
-// scripted: intents matched by pattern, with a little memory (the visitor's name, the last topic, an
-// offer waiting for a "yes"), and real commands run on this box to show things. No network, no AI.
+// scripted: intents matched by pattern, with a memory of the conversation (every question and what
+// it was about, the visitor's name and role, an offer waiting for a "yes"), so "it", "go back to that"
+// and "what did I ask first?" work. Real commands run on this box to show things. No network, no AI.
 // It never prints a flag or the root password: tool output is redacted (ccRedact) and CTF help comes
 // as hints. Asked sincerely what it is, it deflects in character but never claims to be Anthropic's.
 
@@ -14,7 +15,8 @@ const ccOrange = (html) => `<span class="cc-orange">${html}</span>`;
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 
 // What the assistant remembers during a session.
-const cc = { name: '', last: null, offer: null, tokens: 0, turns: 0, started: 0 };
+// `history` holds every turn: { raw, q, norm, subject, minor }, where subject is what the reply was about.
+const cc = { name: '', role: '', last: null, offer: null, history: [], tokens: 0, turns: 0, started: 0 };
 
 // ---------- rendering, in Claude Code's style ----------
 
@@ -313,6 +315,12 @@ const CC_INTENTS = [
     }],
     [/(give|tell|show|send|what'?s|what is|reveal|leak|need|want)\b.*\b(the )?(flag|answer|solution|password)|spoil|cheat|solve it for me|do it for me/, (q) => ccSpoiler(q)],
     [/^(hi|hello|hey|heya|yo|namaste|sup|hiya|howdy|hola|good (morning|evening|afternoon))\b/, async () => {
+        const prev = ccLastSubject();
+        if (prev) {
+            await ccSay(`Hey again${cc.name ? ` ${cc.name}` : ''}! We were on ${ccSubjectLabel(prev.subject)}. Pick that back up, or something new?`);
+            cc.offer = () => ccRevisit(prev);
+            return;
+        }
         cc.last = { topic: 'greet' };
         await ccSay(pick([
             `Hey${cc.name ? ` ${cc.name}` : ''}! What would you like to do: explore the box, learn about Neox, or try the CTF?`,
@@ -548,6 +556,7 @@ async function ccSearch(q) {
     })(getNode(HOME), HOME);
     if (!hits.length) return false;
     const term = terms.find((t) => hits.some((p) => wordRe(t).test(getNode(p).content)));
+    cc.last = { topic: 'search', search: term };
     await ccSay(pick([`Let me search the box for "${term}".`, `I'll grep Neox's files for "${term}".`]));
     // Work history and skills first, then projects and notes.
     await ccBash(`grep -ri "\\b${term}\\b" ~/experience ~/skills.txt ~/about.txt ~/projects ~/Documents 2>/dev/null | head -6`, 6);
@@ -568,6 +577,24 @@ async function ccFallback(q = '') {
 
 // Intents for things the first pass doesn't cover, checked after CC_INTENTS.
 const CC_MORE_INTENTS = [
+    [/^(?:i'?m|i am|im|i work as) (?:a |an )?(recruiter|hiring manager|hr|manager|founder|student|beginner|newbie|developer|dev|(?:software |devops |security |cloud |network )?engineer|security researcher|pentester|penetration tester|hacker|ctf player|designer|sysadmin|teacher)\b/, async (q) => {
+        cc.role = q.match(/(recruiter|hiring manager|hr|manager|founder|student|beginner|newbie|developer|dev|(?:software |devops |security |cloud |network )?engineer|security researcher|pentester|penetration tester|hacker|ctf player|designer|sysadmin|teacher)\b/)[1];
+        if (/recruiter|hiring|hr|manager|founder/.test(cc.role)) {
+            await ccSay("Good to have you. The quickest overview is the one-page CV, and I'm happy to answer anything about Neox's experience. Want me to open the CV?");
+            cc.offer = () => ccResume();
+        } else if (/student|beginner|newbie/.test(cc.role)) {
+            const next = ccNextCtf();
+            await ccSay(`Welcome! You're in a good place to learn: the CTF here starts gentle and every step is a real technique.${next ? ` Want me to walk you into **${next.name}**?` : ''}`);
+            if (next) cc.offer = () => ccCtfHint(next);
+        } else if (/pentest|penetration|hacker|ctf|researcher|security/.test(cc.role)) {
+            await ccSay("Then you'll want the CTF: six flags along a real attack path, four hidden quests, and I only ever nudge. Want the scoreboard?");
+            cc.offer = () => ccCtfOverview();
+        } else {
+            await ccSay("Nice. You might enjoy the site's own source (VS Code, Alt+Shift+N) or the InfraEye demo (Alt+I). Want the quick tour first?");
+            cc.offer = () => ccTour();
+        }
+    }],
+    [/already (said|told|showed|mentioned|asked)|said that already|told me that already|you'?re repeating|same (answer|thing) again/, () => ccSay(`Fair point, sorry about that. ${ccUnseen()}`)],
     [/(tell|show) me something (interesting|cool|fun)|surprise me|random fact|fun fact/, () => ccSay(pick([
         'The arcade\'s Fretwork game plays a song composed for this site, *Kathmandu Overdrive*, synthesised live in your browser. Alt+G.',
         'Every failed command plays the same "fahhh" Neox hears in their own zsh. Try typing `lss`.',
@@ -628,12 +655,198 @@ function ccFixTypos(q) {
     }).join(' ');
 }
 
+// ---------- conversation memory ----------
+
+const ccClean = (raw) => ccFixTypos(raw.toLowerCase().replace(/[‘’]/g, "'").replace(/[!?.,]+$/g, '').replace(/\s+/g, ' ').trim());
+const ccNorm = (q) => q.replace(/[^\w\s]/g, '').replace(/\b(the|a|an|please|pls|again|so|um|uh)\b/g, '').replace(/\s+/g, ' ').trim();
+const ccList = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+
+const CC_FILE_LABELS = { '~neox/education.txt': "Neox's education", '~neox/certifications.txt': 'the certifications', '~neox/music/README.txt': "Neox's music" };
+const CC_TOPIC_LABELS = { about: "Neox's background", experience: "Neox's work history", projects: 'the projects', skills: 'the skills list', contact: 'contact details', music: "Neox's music", tour: 'the tour', ctf: 'the CTF scoreboard', quests: 'the hidden quests' };
+
+// How a past reply's subject is named when talking about it ("we were on DeployForge").
+function ccSubjectLabel(s) {
+    if (!s) return '';
+    if (s.ch) return `the ${s.ch.name} challenge`;
+    if (s.path) {
+        if (CC_FILE_LABELS[s.path]) return CC_FILE_LABELS[s.path];
+        const [what, where] = (textLines(getNode(normalize(s.path))?.content || '')[0] || '').replace(/^#\s*|\s*\[.*$/g, '').split(' — ');
+        return s.path.includes('/experience/') && where ? `the ${where} role` : what;
+    }
+    if (s.term) return s.term;
+    if (s.cmd) return `the \`${s.cmd}\` command`;
+    if (s.search) return `"${s.search}" in Neox's files`;
+    return CC_TOPIC_LABELS[s.topic] || '';
+}
+
+const ccLastSubject = () => [...cc.history].reverse().find((t) => ccSubjectLabel(t.subject));
+
+// The subject before the current one, for "go back to that".
+function ccEarlierSubject() {
+    const now = ccSubjectLabel(ccLastSubject()?.subject);
+    return [...cc.history].reverse().find((t) => ccSubjectLabel(t.subject) && ccSubjectLabel(t.subject) !== now);
+}
+
+// Something the visitor hasn't seen yet, offered after a recap or a "you said that already".
+const CC_SUGGEST = [
+    ['ctf', 'the CTF', () => ccCtfOverview()],
+    ['projects', "Neox's projects", () => ccProjects()],
+    ['experience', 'the work history', () => ccExperience()],
+    ['tour', 'a tour of the desktop', () => ccTour()],
+    ['quests', 'the hidden quests', () => ccHiddenQuests()],
+];
+
+function ccUnseen() {
+    const seen = new Set(cc.history.map((t) => (t.subject?.ch ? 'ctf' : t.subject?.topic)));
+    const next = CC_SUGGEST.find(([topic]) => !seen.has(topic));
+    if (!next) return 'Want to pick any of that back up, or ask me something new?';
+    cc.offer = next[2];
+    return `We haven't looked at ${next[1]} yet, though. Want to?`;
+}
+
+async function ccRevisit(entry) {
+    const s = entry.subject;
+    const label = ccSubjectLabel(s);
+    await ccSay(pick([`Back to ${label}.`, `Sure, picking ${label} back up.`, `Right, ${label}.`]));
+    if (s.ch) return ccCtfHint(s.ch);
+    if (s.path) return ccFromFile(s.path);
+    if (s.term) return ccSay(s.text);
+    if (s.cmd) return ccExplainCommand(s.cmd);
+    if (s.search) return ccSearch(s.search);
+    const again = { about: ccAbout, experience: ccExperience, projects: ccProjects, tour: ccTour, ctf: ccCtfOverview, quests: ccHiddenQuests }[s.topic];
+    return again ? again() : ccRoute(s.topic, s.topic);
+}
+
+const CC_RECALL = /what (did|have|was) i (just )?(ask|asked|say|said|type|typed)|what was my (first|last|previous|earlier) (question|message)|my (first|last|previous) question|what (have|were|did) we (been )?(talk|talked|talking|chat|chatting|discuss|discussed|discussing|cover|covered)|what (have|did) you (told|tell|show|shown|showed) me|^recap|summar(y|ise|ize) (of )?(our|this|the) (conversation|chat)|conversation (so far|history)|chat history|do you remember|what do you (know|remember) about me|^remember (me|what)/;
+
+async function ccRecall(q) {
+    const asked = cc.history.filter((t) => !t.minor);
+    const facts = [cc.name && `you're ${cc.name}`, cc.role && `you're ${/^[aeiou]/.test(cc.role) ? 'an' : 'a'} ${cc.role}`].filter(Boolean);
+    const topics = [...new Set(cc.history.map((t) => ccSubjectLabel(t.subject)).filter(Boolean))];
+    const quote = (t) => `"${ccRedact(t.raw)}"${ccSubjectLabel(t.subject) ? `, about ${ccSubjectLabel(t.subject)}` : ''}`;
+    if (/about me|remember me|my name/.test(q) || !asked.length) {
+        const known = facts.length ? `I know ${ccList(facts)}.` : "You haven't told me your name yet.";
+        if (!asked.length) return ccSay(`${facts.length ? `${known} ` : ''}We've only just started, so there's not much to look back on yet. What would you like to know?`);
+        return ccSay(`${known} ${topics.length ? `So far you've been asking about ${ccList(topics.slice(-4))}.` : `You've asked me ${asked.length} thing${asked.length > 1 ? 's' : ''} so far.`}`);
+    }
+    if (/first/.test(q)) return ccSay(`Your first question was ${quote(asked[0])}.`);
+    if (/last|previous|just/.test(q)) return ccSay(`Just before this you asked ${quote(asked.at(-1))}.`);
+    const recent = asked.slice(-8);
+    await ccSay(`Here's what you've asked so far${asked.length > recent.length ? ` (the last ${recent.length} of ${asked.length})` : ''}:\n${recent.map((t) => `  · ${ccRedact(t.raw)}`).join('\n')}${topics.length ? `\n\nSo we've covered ${ccList(topics)}.` : ''} ${ccUnseen()}`);
+}
+
+// "Go back to that", "earlier you mentioned deployforge", "what did you say about XSS".
+const CC_BACK = /^(?:(?:can we |let'?s )?go back to|back to|returning to|earlier you (?:said|mentioned|talked about)|you (?:said|mentioned) (?:something )?(?:earlier |before )?about|what did you say (?:earlier |before )?about|remind me (?:about|what you said about))\s+/;
+const CC_BACK_BARE = /^(go back|back to (that|it|before)|(the )?previous (topic|one)|where were we|what were you saying( before)?)$/;
+
+async function ccBackTo(q, raw) {
+    const back = q.match(CC_BACK);
+    const rest = back ? q.slice(back[0].length).replace(/^the /, '').trim() : '';
+    if (!rest || /^(that|it|this|(previous|last|other) (one|thing|topic)|before|earlier)$/.test(rest)) {
+        const entry = /where were we|what were you saying/.test(q) ? ccLastSubject() : ccEarlierSubject();
+        if (entry) return ccRevisit(entry);
+        return ccSay("We haven't really got into anything yet, so there's nothing to go back to. What would you like to look at?");
+    }
+    const entry = [...cc.history].reverse().find((t) => ccSubjectLabel(t.subject).toLowerCase().includes(rest));
+    return entry ? ccRevisit(entry) : ccRoute(rest, raw);
+}
+
+// "What tech does it use?", "when did he build that?": questions about the last thing discussed.
+const CC_IT = /\b(it|its|it's|that( one| project| job| role| challenge| file| command)?|this (one|project|job|role|challenge|file|command)|them|those)\b/;
+const CC_ASPECTS = [
+    [/tech|stack|built (with|in|using)|languages?|tools?|written in|use\b|integrat/, 'stack|tech|built|language|python|c\\+\\+|juce|kubernetes|helm|docker|buildkit|jenkins|postgres|nmap|wazuh|integrates|rust|go '],
+    [/when|what year|how long|dates?|since/, '20[0-9][0-9]|present'],
+    [/impact|result|outcome|achiev|improv|matter/, 'reduc|improv|fixed|near-zero|faster|%|saved|downtime'],
+    [/role|responsib|what did (he|she|they|neox) do|part in/, 'design|built|led|operate|deploy|administer|creator|maintainer'],
+    [/link|url|demo|repo|source|github|docs/, 'http|github|docs|demo'],
+    [/private|open.?source|public/, 'private|public|open'],
+];
+
+async function ccFileDetail(path, q) {
+    const label = ccSubjectLabel({ path });
+    const lines = textLines(getNode(normalize(path))?.content || '');
+    if (/^(open|show|cat|read|print)\b/.test(q)) return ccFromFile(path, 20);
+    const aspect = CC_ASPECTS.find(([re]) => re.test(q));
+    const has = (pattern) => pattern && lines.some((line) => new RegExp(pattern, 'i').test(line));
+    // "Does it use Docker?" asks about Docker, not about the stack in general.
+    const named = ccSearchTerms(q.replace(CC_IT, ' ')).filter((t) => !CC_ASPECTS.some(([re]) => re.test(t))).join('|');
+    if (named && !has(named)) {
+        await ccSay(`The ${label} write-up doesn't mention ${named.split('|').map((t) => t[0].toUpperCase() + t.slice(1)).join(' or ')}.${has(aspect?.[1]) ? ' Here\'s what it does say:' : ''}`);
+        if (has(aspect?.[1])) await ccBash(`grep -iE "${aspect[1]}" ${path}`, 6);
+        return;
+    }
+    const pattern = named || aspect?.[1];
+    if (has(pattern)) {
+        await ccSay(pick([`From the ${label} write-up:`, `Checking the ${label} notes.`, `Here's what the ${label} file says.`]));
+        await ccBash(`grep -iE "${pattern}" ${path}`, 6);
+        return;
+    }
+    await ccSay(`The ${label} write-up doesn't go into that. Here's what it does cover:`);
+    return ccFromFile(path, 8);
+}
+
+async function ccAboutIt(q, raw) {
+    const question = /^(what|whats|what's|who|where|when|why|how|is|are|does|do|did|can|could|tell|show|explain|run|open|which|read|cat)\b/.test(q) || /\?\s*$/.test(raw);
+    if (!question || !CC_IT.test(q) || /flag|password|answer|solution|spoil|this (site|box|place|desktop|machine)/.test(q)) return false;
+    const s = ccLastSubject()?.subject;
+    if (!s) return false;
+    // A named thing wins over "it", except a term asked about a project ("does it use Docker?").
+    if (CC_FILES.some(([re]) => re.test(q)) || ccWhichCtf(q) || ccCommandIn(q) || (!s.path && CC_TERMS.some(([re]) => re.test(q)))) return false;
+    if (s.ch) {
+        await ccCtfHint(s.ch);
+        return true;
+    }
+    if (s.path) {
+        await ccFileDetail(s.path, q);
+        return true;
+    }
+    if (s.cmd) {
+        if (/run|try|show|demo|see|example/.test(q)) await ccBash(ccDemo(s.cmd) || `man ${s.cmd}`, 10);
+        else await ccExplainCommand(s.cmd);
+        return true;
+    }
+    if (s.term) {
+        if (/\b(he|his|him|she|her|they|their|neox|manish)\b/.test(q) && await ccSearch(s.term.toLowerCase())) return true;
+        await ccSay(`Still **${s.term}**, the one I just explained. ${s.text.replace(/^(A |An )?\*\*[^*]+\*\* (\([^)]*\) )?/, 'In short, it ')}`);
+        return true;
+    }
+    return false;
+}
+
+// ---------- answering ----------
+
+const CC_DEMOS = { ls: 'ls -la', cat: 'cat ~neox/skills.txt', grep: 'grep -i kubernetes ~neox/skills.txt', find: 'find ~neox -name "*.md" -maxdepth 2', nmap: 'nmap localhost', ps: 'ps aux | head -8', df: 'df -h', free: 'free -h', uptime: 'uptime', whoami: 'whoami', id: 'id' };
+const ccDemo = (cmd) => CC_DEMOS[cmd];
+
+async function ccExplainCommand(cmd) {
+    cc.last = { topic: 'command', cmd };
+    const { usage, desc } = COMMANDS[cmd];
+    const demo = ccDemo(cmd);
+    await ccSay(`\`${cmd}\`: ${desc}.\n\nUsage: \`${usage}\`. \`man ${cmd}\` has the details${demo ? ', or I can run it for you. Want to see it in action?' : '.'}`);
+    if (demo) cc.offer = () => ccBash(demo);
+}
+
+async function ccDefine(term) {
+    const name = term[1].match(/\*\*([^*]+)\*\*/)?.[1] || '';
+    cc.last = { topic: 'term', term: name, text: term[1] };
+    await ccSay(term[1]);
+}
+
 async function ccAnswer(raw) {
-    const q = ccFixTypos(raw.toLowerCase().replace(/[‘’]/g, "'").replace(/[!?.,]+$/g, '').replace(/\s+/g, ' ').trim());
+    let q = ccClean(raw);
     const offer = cc.offer;
     cc.offer = null;
-    if (offer && CC_YES.test(q)) return offer(q);
+    if (offer && (CC_YES.test(q) || /^((open|launch|run|show|start|play) (it|that|them)|do it|show me)( for me)?( please)?$/.test(q))) return offer(q);
     if (offer && CC_NO.test(q)) return ccSay(pick(['No problem. What would you like to do instead?', 'Sure thing. Anything else on your mind?']));
+    // "And CyberLynX?", "what about the k8s one?": the same kind of question about something else.
+    const elliptic = q.match(/^(and|what about|how about|and what about)\s+(.+)$/);
+    if (elliptic) {
+        q = elliptic[2];
+        const cmd = ccCommandIn(`what is ${q}`);
+        if (cmd) return ccExplainCommand(cmd);
+        const term = !/\b(he|his|him|she|her|they|their|neox|manish)\b/.test(q) && CC_TERMS.find(([re]) => re.test(q));
+        if (term && !CC_FILES.some(([re]) => re.test(q))) return ccDefine(term);
+    }
     if (CC_MORE.test(q) || /tell me more|go on|more (about|on) (that|it|this)|elaborate|details?$/.test(q)) {
         if (cc.last?.ch) return ccCtfHint(cc.last.ch);
         if (cc.last?.topic === 'file') return ccMoreFile();
@@ -647,34 +860,35 @@ async function ccAnswer(raw) {
         cc.offer = () => ccTour();
         return;
     }
+    if (CC_RECALL.test(q)) return ccRecall(q);
+    if (CC_BACK.test(q) || CC_BACK_BARE.test(q)) return ccBackTo(q, raw);
+    if (await ccAboutIt(elliptic && CC_IT.test(q) ? `what about ${q}` : q, raw)) return;
+    // Asking the same thing twice gets noticed (hints are exempt: asking again is how you get the next one).
+    const norm = ccNorm(q);
+    const times = norm.split(' ').length >= 2 && !/hint|stuck|nudge|clue|next/.test(q) ? cc.history.filter((t) => t.norm === norm).length : 0;
+    if (times === 1) await ccSay(pick(['You asked that a little earlier, so here it is again.', 'We covered this a bit ago, but happy to go over it again.']));
+    else if (times > 1) await ccSay(`That's the ${['third', 'fourth', 'fifth'][times - 2] || `${times + 1}th`} time you've asked that one. Is my answer missing what you're after? Here it is again, and try rephrasing if not.`);
+    return ccRoute(q, raw);
+}
+
+async function ccRoute(q, raw) {
     // Specific things first: a named project or job, a command, a term.
     const file = CC_FILES.find(([re]) => re.test(q));
     const askedAbout = /what|tell|about|explain|describe|more|show|who|where|which|how|details?|info/.test(q) || q.split(' ').length <= 3;
     if (file && askedAbout && !/^(open|launch|play)\b/.test(q)) return ccFromFile(file[1]);
     const cmd = ccCommandIn(q);
-    if (cmd) {
-        const { usage, desc } = COMMANDS[cmd];
-        await ccSay(`\`${cmd}\`: ${desc}.\n\nUsage: \`${usage}\`. \`man ${cmd}\` has the details${['ls', 'cat', 'grep', 'find', 'nmap', 'ps', 'df', 'free', 'uptime', 'whoami', 'id'].includes(cmd) ? ', or I can run it for you. Want to see it in action?' : '.'}`);
-        if (['ls', 'cat', 'grep', 'find', 'nmap', 'ps', 'df', 'free', 'uptime', 'whoami', 'id'].includes(cmd)) {
-            const demo = { ls: 'ls -la', cat: 'cat ~neox/skills.txt', grep: 'grep -i kubernetes ~neox/skills.txt', find: 'find ~neox -name "*.md" -maxdepth 2', nmap: 'nmap localhost', ps: 'ps aux | head -8', df: 'df -h', free: 'free -h', uptime: 'uptime', whoami: 'whoami', id: 'id' }[cmd];
-            cc.offer = () => ccBash(demo);
-        }
-        return;
-    }
+    if (cmd) return ccExplainCommand(cmd);
     // "What does he do with Kubernetes?" is about Neox, not the term: search the files instead.
     const aboutPerson = /\b(he|his|him|she|her|they|their|neox|manish)\b/.test(q);
     if (aboutPerson && CC_TERMS.some(([re]) => re.test(q)) && await ccSearch(q)) return;
     const term = /what('?s| is| are| does)|explain|meaning|define|mean\b/.test(q) && CC_TERMS.find(([re]) => re.test(q));
-    if (term) {
-        await ccSay(term[1]);
-        return;
-    }
+    if (term) return ccDefine(term);
     // The specific small-talk and career questions first, then the broad topics.
     for (const [re, reply] of [...CC_MORE_INTENTS, ...CC_INTENTS]) {
         if (re.test(q)) return reply(q, raw);
     }
     const anyTerm = CC_TERMS.find(([re]) => re.test(q));
-    if (anyTerm) return ccSay(anyTerm[1]);
+    if (anyTerm) return ccDefine(anyTerm);
     return ccFallback(q);
 }
 
@@ -699,7 +913,7 @@ function ccWelcome() {
         c('dim', " 2. Use Claude for help with the CTF: it guides, it won't spoil"),
         c('dim', ' 3. Be as specific as you would with another engineer for the best results'),
         '',
-        ` ${c('dim', '※ Tip:')} ${c('dim', pick(['Try "how do I get root?"', 'Try "give me a tour"', 'Try "who is Neox?"', 'Try "help me with the CTF"']))}`,
+        ` ${c('dim', '※ Tip:')} ${c('dim', cc.history.some((t) => !t.minor) ? '`claude -c` continues your last conversation; I still remember it either way' : pick(['Try "how do I get root?"', 'Try "give me a tour"', 'Try "who is Neox?"', 'Try "help me with the CTF"']))}`,
         '',
     ]);
 }
@@ -741,7 +955,7 @@ function ccCycleMode(e) {
 
 function ccSlash(cmd) {
     if (cmd === '/clear') {
-        Object.assign(cc, { last: null, offer: null });
+        Object.assign(cc, { name: '', role: '', last: null, offer: null, history: [] });
         output.innerHTML = '';
         ccWelcome();
         return true;
@@ -755,6 +969,7 @@ function ccSlash(cmd) {
             ` ${c('b', 'Usage Modes:')}`,
             ' • REPL: claude (interactive session)',
             ' • Non-interactive: claude -p "question"',
+            ' • Continue: claude -c (pick up the last conversation)',
             '',
             ` ${c('b', 'Interactive Mode Commands:')}`,
             `  ${c('b', '/clear')} - Clear conversation history and free up context`,
@@ -794,6 +1009,7 @@ function ccSlash(cmd) {
 // One visitor turn. Esc or Ctrl+C interrupts the reply, not the session.
 async function ccTurn(raw) {
     cc.turns++;
+    const before = cc.last;
     const onKey = (e) => {
         if (e.key === 'Escape' && state.busy) state.abort = true;
     };
@@ -803,11 +1019,17 @@ async function ccTurn(raw) {
         if (!state.abort) await ccAnswer(raw);
     } finally {
         window.removeEventListener('keydown', onKey, true);
+        const q = ccClean(raw);
+        const minor = CC_YES.test(q) || CC_NO.test(q) || CC_MORE.test(q) || CC_RECALL.test(q) || /^(ok|okay|cool|nice|great|lol|lmao|haha+|thanks|thank you|thx|ty|hmm+)\b/.test(q);
+        cc.history.push({ raw, q, norm: ccNorm(q), subject: cc.last !== before ? cc.last : null, minor });
     }
     if (state.abort) print(c('err', '  ⎿  Interrupted by user'));
     state.abort = false;
     state.skip = false;
 }
+
+// The last session's screen, for `claude -c`.
+const ccTranscript = document.createDocumentFragment();
 
 async function cmdClaude({ args }) {
     if (args[0] === '--version' || args[0] === '-v') return [`${CC_VERSION} (Claude Code)`];
@@ -824,7 +1046,9 @@ async function cmdClaude({ args }) {
     const screen = output;
     const scrollback = document.createDocumentFragment();
     scrollback.append(...screen.childNodes);
-    ccWelcome();
+    // -c / --continue brings back the last conversation's transcript as well as its memory.
+    if (/^-(c|-continue|r|-resume)$/.test(args[0] || '') && ccTranscript.childNodes.length) screen.append(ccTranscript);
+    else ccWelcome();
     ccInputMode(true);
     window.addEventListener('keydown', ccCycleMode, true);
     try {
@@ -851,6 +1075,7 @@ async function cmdClaude({ args }) {
         ccInputMode(false);
         terminal.classList.remove('cc-session');
         ccLeaving = false;
+        ccTranscript.replaceChildren(...screen.childNodes);
         screen.replaceChildren(scrollback);
         screen.parentElement.scrollTop = screen.parentElement.scrollHeight;
     }
@@ -860,5 +1085,5 @@ async function cmdClaude({ args }) {
 LAUNCH.splice(2, 0, { name: 'Claude Code', hint: 'claude', run: 'claude' });
 
 Object.assign(COMMANDS, {
-    claude: { group: 'Fun', usage: 'claude [-p "QUESTION"]', desc: 'Claude Code: ask anything about this box, get help with the CTF', run: cmdClaude },
+    claude: { group: 'Fun', usage: 'claude [-c] [-p "QUESTION"]', desc: 'Claude Code: ask anything about this box, get help with the CTF', run: cmdClaude },
 });
