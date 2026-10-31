@@ -44,6 +44,8 @@ Alt stands in for Super, which the OS or browser keeps for itself.
 | Alt+1..9 | Switch workspace |
 | Alt+Shift+1..9 | Move window to workspace |
 
+A failed command plays the same "fahhh" my own zsh does (`assets/sounds`); the volume icon in the bar mutes it.
+
 `curl`, `weather`, `gh` and `git` make real requests (wttr.in and the public GitHub API, 60 requests/hour per visitor IP).
 
 No build step — open `index.html` or push to deploy.

@@ -1384,6 +1384,17 @@ function waitKey() {
     });
 }
 
+// Like neox's own zsh: a failed command (non-zero exit) gets a "fahhh". The volume icon in the bar mutes it.
+const errorSound = new Audio('assets/sounds/fahhhhh.mp3');
+errorSound.preload = 'auto';
+errorSound.volume = 0.6;
+
+function playErrorSound() {
+    if (document.querySelector('.bar-audio.muted')) return;
+    errorSound.currentTime = 0;
+    errorSound.play().catch(() => {});
+}
+
 async function submit() {
     const raw = input.value;
     input.value = '';
@@ -1418,6 +1429,7 @@ async function submit() {
     setBusy(true);
     setTitle(line.trim());
     await runLine(line);
+    if (state.status !== 0 && line.trim()) playErrorSound();
     setBusy(false);
     setTitle();
     updatePrompt();
