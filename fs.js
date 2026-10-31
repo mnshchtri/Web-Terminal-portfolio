@@ -34,7 +34,7 @@ Welcome to NeoxOS — the personal system of Manish Karki (Neox).
   * Commands:     help
   * Overview:     neofetch
   * Challenge:    NeoxCTF — 6 flags hidden on this box, plus secret quests.  (start: ctf)
-  * Lost?         claude  (a guide that answers questions and helps with the CTF)
+  * Lost?         claude  (Claude Code: ask it anything about this box)
 `),
         passwd: file(`
 root:x:0:0:root:/root:/bin/bash
@@ -111,7 +111,7 @@ It's also a CTF: six flags are hidden on this box (web, network, cloud,
 forensics, privesc...) plus secret quests nobody will tell you about.
   ctf                        the scoreboard
   ctf info 1                 where to start
-  claude                     a guide: ask it anything about this box
+  claude                     Claude Code: ask it anything, get CTF hints
 
 Tip: Tab completes, ↑/↓ walks history, Ctrl+L clears, Ctrl+C interrupts.
 Broke something? reboot puts everything back.

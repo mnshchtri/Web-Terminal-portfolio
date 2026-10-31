@@ -1276,7 +1276,8 @@ async function runPipeline(cmds) {
         const { words, redirect: redir, quietErr } = cmds[i];
         const last = i === cmds.length - 1;
         state.quietErr = !!quietErr;
-        const out = await exec(words.flatMap(expandGlob), stdin, !last || !!redir).finally(() => { state.quietErr = false; });
+        // While Claude's tools run a command (claude.js), output is captured, so nothing is a TTY.
+        const out = await exec(words.flatMap(expandGlob), stdin, !last || !!redir || !!state.capturing).finally(() => { state.quietErr = false; });
         if (redir) redirect(redir, out);
         if (last && !redir) print(out);
         stdin = redir ? '' : out.map(toText).join('\n') + (out.length && !out.noNewline ? '\n' : '');

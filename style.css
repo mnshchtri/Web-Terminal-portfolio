@@ -1521,9 +1521,19 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
 .refused-term { box-sizing: border-box; width: 100%; margin: 6px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font: 12px/1.6 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; }
 .refused-term mark { padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--red) 30%, transparent); color: var(--fg); }
 
-/* claude.js: the Claude Code-style guide */
+/* claude.js: Claude Code */
 .cc-orange { color: #d97757; }
+.term .b { font-weight: 700; }
 .cc-dot { color: var(--fg); }
+.cc-msg { padding-left: 2ch; text-indent: -2ch; }
 .cc-msg b { color: var(--fg); }
+.cc-msg .cc-pre { text-indent: 0; }
+.cc-msg i { font-style: italic; }
+.cc-tool { font-weight: 700; }
+.cc-code { color: #b1b9f9; }
+.cc-pre { margin: 4px 0 4px 2ch; padding-left: 1ch; border-left: 2px solid var(--line); color: var(--fg); }
 .cc-out { opacity: 0.9; }
 .cc-out .ls-grid { margin: 2px 0 0 5ch; }
+.input-line.cc-input { margin-top: 6px; padding: 3px 8px; border: 1px solid #888; border-radius: 6px; }
+.input-line.cc-input .user-input::placeholder { color: var(--dim); }
+.cc-foot { padding: 2px 0 0; color: var(--dim); white-space: pre; }
