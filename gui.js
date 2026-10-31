@@ -139,7 +139,14 @@ const NEOX_MUSIC = 'https://www.youtube-nocookie.com/embed/videoseries?list=UU-m
 // Sites that refuse to be shown inside another page (X-Frame-Options / CSP frame-ancestors), plus the
 // Arch wiki, whose bot protection can't complete inside a frame.
 const FRAME_BLOCKED = ['github.com', 'linkedin.com', 'medium.com', 'x.com', 'twitter.com', 'duckduckgo.com',
-    'google.com', 'facebook.com', 'instagram.com', 'reddit.com', 'stackoverflow.com', 'youtube.com', 'archlinux.org'];
+    'google.com', 'facebook.com', 'instagram.com', 'reddit.com', 'stackoverflow.com', 'youtube.com', 'archlinux.org',
+    'messenger.com', 'whatsapp.com', 'tiktok.com', 'discord.com', 'netflix.com', 'amazon.com', 'paypal.com',
+    'microsoft.com', 'apple.com', 'twitch.tv', 'pinterest.com', 'chatgpt.com', 'claude.ai', 'gmail.com'];
+// What the server says when asked, for the error page. Sites not listed get the general form.
+const FRAME_HEADERS = {
+    'facebook.com': 'x-frame-options: DENY', 'github.com': 'x-frame-options: deny', 'google.com': 'x-frame-options: SAMEORIGIN',
+    'linkedin.com': 'x-frame-options: sameorigin', 'stackoverflow.com': 'x-frame-options: SAMEORIGIN', 'youtube.com': 'x-frame-options: SAMEORIGIN',
+};
 
 // Sites served from inside the page (the CTF's localhost and ctf.neox, in ctf.js). Each handler gets a
 // URL and returns null or { html } (a page of this app's own UI), { doc, base } (a web page) or { text }.
@@ -212,11 +219,32 @@ function browserApp(startUrl = START) {
         </div>`;
     }
 
-    function refusedPage(url) {
-        return `<div class="refused">${G.sad}<h2>${esc(hostOf(url))} refused to connect.</h2>
-            <p>This site can't be shown inside this window, but a real browser tab works.</p>
+    // Big sites forbid being shown inside other pages, so they open in a real tab instead (see go),
+    // and this page says why, the way a security engineer would check it.
+    function refusedPage(url, opened) {
+        const host = hostOf(url);
+        const known = Object.keys(FRAME_HEADERS).find((d) => host === d || host.endsWith(`.${d}`));
+        const bot = /archlinux\.org$/.test(host);
+        const prompt = `<span class="ok">visitor@neox</span>:<span class="dir">~</span>$ `;
+        const check = bot
+            ? `${prompt}curl -s https://${esc(host)} | grep -o '&lt;title&gt;.*'\n&lt;title&gt;Making sure you're not a bot!&lt;/title&gt;`
+            : `${prompt}curl -sI https://${esc(host)} | grep -iE 'x-frame-options|frame-ancestors'\n${known
+                ? `<mark>${esc(FRAME_HEADERS[known])}</mark>`
+                : `<mark>x-frame-options</mark> / <mark>content-security-policy: frame-ancestors</mark> <span class="dim"># one of these</span>`}`;
+        const why = bot
+            ? "Its bot check can't complete inside another page."
+            : `${esc(host)} tells browsers never to show it inside another site. That blocks clickjacking (an invisible frame under a fake button that makes you click "Like" or "Delete"), and every browser enforces it, so no portfolio can embed it. Nor should one.`;
+        const status = opened === true
+            ? `<p class="refused-opened">${G.ext} Opened ${esc(host)} in a new tab for you.</p>`
+            : opened === false
+                ? `<p class="refused-opened bad">Your browser blocked the pop-up. Use the button below (or allow pop-ups for this site).</p>`
+                : '';
+        return `<div class="refused">${G.sad}<h2>${esc(host)} refused to connect.</h2>
+            ${status}
+            <pre class="refused-term">${check}</pre>
+            <p>${why}</p>
             <p class="dim">ERR_BLOCKED_BY_RESPONSE</p>
-            <button class="btn" data-open="${esc(url)}">Open in new tab</button></div>`;
+            <button class="btn" data-open="${esc(url)}">${G.ext} Open ${esc(host)} in a new tab</button></div>`;
     }
 
     // Pages from LOCAL_SITES. Web pages render in a sandbox without scripts; their links are followed here.
@@ -267,7 +295,8 @@ function browserApp(startUrl = START) {
                 go(resolveAddress(e.target.querySelector('input').value));
             });
         } else if (frameBlocked(url)) {
-            view.innerHTML = refusedPage(url);
+            view.innerHTML = refusedPage(url, active.opened?.url === url ? active.opened.ok : undefined);
+            active.opened = null;
         } else {
             view.innerHTML = `<iframe src="${esc(url)}" referrerpolicy="no-referrer" allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                 sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"></iframe>`;
@@ -292,6 +321,14 @@ function browserApp(startUrl = START) {
         active.hist.splice(active.pos + 1);
         active.hist.push(url);
         active.pos = active.hist.length - 1;
+        // Going to a site that can't be framed opens it for real. This runs inside the click or Enter
+        // that asked for it, so pop-up blockers allow it; back/forward/reload only show the explanation.
+        if (!url.startsWith('view-source:') && /^https?:/.test(url) && frameBlocked(url)) {
+            // Without 'noopener' window.open reports whether the tab opened; the opener link is cut by hand.
+            const tab = window.open(url, '_blank');
+            if (tab) tab.opener = null;
+            active.opened = { url, ok: !!tab };
+        }
         addr.blur();
         render();
     }
