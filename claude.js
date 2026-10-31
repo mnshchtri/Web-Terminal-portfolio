@@ -443,7 +443,120 @@ const CC_YES = /^(y|ye|yes|yeah|yep|yup|sure|ok|okay|go|go on|go ahead|do it|ple
 const CC_NO = /^(n|no|nope|nah|not now|later|maybe later|no thanks)\b/;
 const CC_MORE = /^(more|another( one| hint)?|next( hint)?|again|still stuck|i'?m still stuck|keep going|continue|and\??|then\??|what else)\b/;
 
-async function ccFallback() {
+// ---------- deeper knowledge: files on the box, terms, commands ----------
+
+// Projects and jobs, each answered from its own file. Keys are the words people use for them.
+const CC_FILES = [
+    [/infra ?eye/, '~neox/projects/infra-eye.md'],
+    [/deploy ?forge/, '~neox/projects/deployforge.md'],
+    [/cyber ?lynx/, '~neox/projects/cyberlynx.md'],
+    [/trimurti ?sec|trimurti/, '~neox/projects/trimurtisec.md'],
+    [/sec ?audit/, '~neox/projects/secaudit.md'],
+    [/password (manager|widget)|passwords? widget|passwd/, '~neox/projects/passwd-manager.md'],
+    [/guitar rig|audio dsp|\bdsp\b|juce/, '~neox/projects/audio-dsp.md'],
+    [/oxidaw|\bdaw\b/, '~neox/projects/oxidaw.md'],
+    [/signal ?verse/, '~neox/projects/signalverse.md'],
+    [/wazuh|siem/, '~neox/projects/wazuh-siem.md'],
+    [/xss (lab|security lab)/, '~neox/projects/xss-security-lab.md'],
+    [/citytech|current (job|role)|where does (neox|manish|he|she|they) work|where (do|does) (neox|manish) work/, '~neox/experience/01-citytech.md'],
+    [/inred|intern(ship)?/, '~neox/experience/02-inred-labs.md'],
+    [/uni express/, '~neox/experience/03-uni-express.md'],
+    [/yes international/, '~neox/experience/04-yes-international.md'],
+    [/siddhi ganesh/, '~neox/experience/05-siddhi-ganesh.md'],
+    [/educat|degree|universit|college|stud(y|ied)|school|bsc|islington|graduat/, '~neox/education.txt'],
+    [/certif|course|tryhackme|hack ?the ?box|thm\b|htb\b|tcm|aws academy/, '~neox/certifications.txt'],
+];
+
+async function ccFromFile(path, lines = 10) {
+    cc.last = { topic: 'file', path, shown: lines };
+    await ccBash(`head -${lines} ${path}`, lines);
+    const total = textLines(getNode(normalize(path))?.content || '').length;
+    if (total > lines) {
+        await ccSay(pick(['There\'s more in that file. Want the rest?', 'That\'s the top of it. Say "more" for the rest.']));
+        cc.offer = () => ccMoreFile();
+    } else {
+        cc.last = { topic: 'filedone', path };
+        await ccSay(pick(['That\'s the whole file. Anything else you\'d like to dig into?', 'That\'s all of it. What else are you curious about?']));
+    }
+}
+
+async function ccMoreFile() {
+    const { path, shown } = cc.last;
+    await ccBash(`head -${shown + 14} ${path} | tail -14`, 14);
+    cc.last = { topic: 'file', path, shown: shown + 14 };
+}
+
+// Short, accurate explanations of the terms visitors bump into here.
+const CC_TERMS = [
+    [/\bctf\b|capture the flag/, 'A **CTF** (capture the flag) is a security game: you break into deliberately vulnerable systems to find secret strings called flags. This box is one; `ctf` shows the scoreboard.'],
+    [/devsecops/, '**DevSecOps** builds security into the whole delivery pipeline (code, CI/CD, infrastructure, runtime) instead of bolting it on at the end. It\'s Neox\'s day job.'],
+    [/zero trust/, '**Zero Trust** means no implicit trust from network location: every request is authenticated and authorised, access is least-privilege, and the network is segmented so one breach doesn\'t spread.'],
+    [/\bxss\b|cross.site scripting/, '**XSS** (cross-site scripting) is when an attacker gets their JavaScript to run in someone else\'s browser on a trusted site, usually through input that\'s rendered without escaping. The fix is context-aware output encoding plus a strict CSP.'],
+    [/sql ?injection|\bsqli\b/, '**SQL injection** is user input ending up inside a SQL query as code. Parameterised queries (prepared statements) fix it at the root.'],
+    [/\brbac\b|role.based/, '**RBAC** (role-based access control) grants permissions to roles and binds people or services to them. In Kubernetes: Role/ClusterRole plus RoleBinding. One sloppy binding is challenge 4 here.'],
+    [/kubernetes|\bk8s\b/, '**Kubernetes** orchestrates containers: it schedules them onto machines, restarts them, scales them and wires up networking. Neox runs it on bare metal. Try `kubectl get pods -A`.'],
+    [/\bdocker\b|container/, '**Docker** packages an app with everything it needs into a container image that runs the same anywhere. `docker ps` works here once you\'re neox.'],
+    [/port knock/, '**Port knocking** keeps a port firewalled until a client "knocks" on a secret sequence of closed ports. It\'s obscurity rather than real security, and challenge 3 is built on it.'],
+    [/base ?64/, '**Base64** is an encoding, not encryption: it turns bytes into printable text and anyone can reverse it with `base64 -d`. Trailing `=` padding is the giveaway.'],
+    [/rot ?13/, '**ROT13** shifts each letter 13 places, so applying it twice gets you back. `tr \'A-Za-z\' \'N-ZA-Mn-za-m\'` does it in a shell.'],
+    [/\bsudo\b/, '**sudo** runs a command as another user (usually root) if `/etc/sudoers` allows it. `sudo -l` lists what you may run.'],
+    [/\bcron\b|crontab/, '**cron** runs scheduled jobs. System jobs live in `/etc/cron.d`, which makes it a classic place for attackers to hide persistence.'],
+    [/\bnmap\b|port scan/, '**nmap** scans hosts for open ports and the services behind them. `nmap -sV localhost` here (and only on machines you\'re allowed to scan).'],
+    [/\bssh\b/, '**SSH** gives you an encrypted shell on a remote machine, ideally with key-based auth rather than passwords.'],
+    [/privilege escalation|privesc/, '**Privilege escalation** is going from limited access to more (usually root) by abusing misconfigurations, leaked credentials or vulnerable software. Challenge 6 here.'],
+    [/reverse shell/, 'A **reverse shell** is when a compromised machine connects *out* to the attacker and hands over a shell, which slips past firewalls that block inbound connections.'],
+    [/\bowasp\b/, '**OWASP** is a nonprofit known for the OWASP Top 10, the standard list of the most critical web application security risks.'],
+    [/mitre|att&?ck/, '**MITRE ATT&CK** is a knowledge base of real-world adversary tactics and techniques, used to map detections and plan defences.'],
+    [/\bsiem\b/, 'A **SIEM** collects logs from across your systems and correlates them into alerts. Neox uses Wazuh, and this box\'s journal has some of its alerts.'],
+    [/\btls\b|\bssl\b|https/, '**TLS** encrypts traffic between client and server and proves the server\'s identity with a certificate. It\'s the S in HTTPS.'],
+    [/firewall/, 'A **firewall** filters network traffic by rules. On Linux that\'s usually nftables, which this box runs.'],
+    [/\bci ?\/ ?cd\b|pipeline|jenkins/, '**CI/CD** automatically builds, tests and ships code on every change. Neox builds Jenkins pipelines for a bank\'s bare-metal Kubernetes.'],
+    [/haproxy|load balanc|reverse proxy|nginx/, 'A **load balancer / reverse proxy** (HAProxy, Nginx) sits in front of services, spreads traffic and lets you roll out releases with zero downtime. Neox designed exactly that at Citytech.'],
+    [/hyprland|tiling/, '**Hyprland** is a tiling Wayland compositor: windows arrange themselves instead of overlapping. This desktop mimics it.'],
+    [/\barch\b|arch linux/, '**Arch Linux** is a minimal, rolling-release distro you assemble yourself. Neox\'s daily driver, with Omarchy on top.'],
+    [/\bomarchy\b/, '**Omarchy** is an opinionated Arch + Hyprland setup. This whole site is modelled on Neox\'s Omarchy desktop, theme included.'],
+];
+
+// "What does ls do?", "how do I use grep": answered from the shell's own command table.
+function ccCommandIn(q) {
+    const m = q.match(/(?:what (?:does|is)|how (?:do i|to|does) (?:use|run)?|explain|usage of|what's)\s+(?:the\s+)?`?([a-z][\w-]*)`?(?:\s+command)?/);
+    const name = m?.[1];
+    return name && Object.hasOwn(COMMANDS, name) && COMMANDS[name].group !== 'Hidden' ? name : null;
+}
+
+// Last resort before admitting defeat: search Neox's files for the question's keywords.
+const CC_STOP = new Set('the a an and or of to in on for with is are was were be been do does did can could would should what whats who whom how why when where which that this these those it its me my i you your yours we our they them their he she his her about tell know any some there here have has had just also please show find give get want like more much many from into than then so if not no yes neox manish karki does use uses used using know knows'.split(' '));
+
+function ccSearchTerms(q) {
+    return [...new Set(q.replace(/[^\w\s-]/g, ' ').split(/\s+/).filter((w) => w.length > 3 && !CC_STOP.has(w)))].slice(0, 3);
+}
+
+async function ccSearch(q) {
+    const terms = ccSearchTerms(q);
+    if (!terms.length) return false;
+    const hits = [];
+    const wordRe = (t) => new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    (function walk(node, path) {
+        for (const [name, child] of Object.entries(node.children)) {
+            const p = `${path}/${name}`;
+            // ~/code holds this site's own source, which would match everything.
+            if (child.type === 'dir' && !child.private && name !== 'code') walk(child, p);
+            else if (child.type === 'file' && !child.private && !name.startsWith('.') && typeof child.content === 'string') {
+                if (terms.some((t) => wordRe(t).test(child.content))) hits.push(p);
+            }
+        }
+    })(getNode(HOME), HOME);
+    if (!hits.length) return false;
+    const term = terms.find((t) => hits.some((p) => wordRe(t).test(getNode(p).content)));
+    await ccSay(pick([`Let me search the box for "${term}".`, `I'll grep Neox's files for "${term}".`]));
+    // Work history and skills first, then projects and notes.
+    await ccBash(`grep -ri "\\b${term}\\b" ~/experience ~/skills.txt ~/about.txt ~/projects ~/Documents 2>/dev/null | head -6`, 6);
+    await ccSay(pick(['That\'s what turns up on this box. Want me to open any of those files?', 'Those are the places it comes up. Anything there you want to dig into?']));
+    return true;
+}
+
+async function ccFallback(q = '') {
+    if (await ccSearch(q)) return;
     const next = ccNextCtf();
     await ccSay(pick([
         `Hmm, I'm not sure I can help with that from in here: I can only see this box. I'm good with Neox's work, ${next ? `the ${next.name} challenge` : 'the hidden quests'}, or finding your way around. What sounds good?`,
@@ -453,23 +566,116 @@ async function ccFallback() {
     cc.offer = () => ccTour();
 }
 
+// Intents for things the first pass doesn't cover, checked after CC_INTENTS.
+const CC_MORE_INTENTS = [
+    [/(tell|show) me something (interesting|cool|fun)|surprise me|random fact|fun fact/, () => ccSay(pick([
+        'The arcade\'s Fretwork game plays a song composed for this site, *Kathmandu Overdrive*, synthesised live in your browser. Alt+G.',
+        'Every failed command plays the same "fahhh" Neox hears in their own zsh. Try typing `lss`.',
+        'There\'s a skull wallpaper behind every terminal, and 31 more backgrounds on Alt+Shift+Space, all from Neox\'s own themes.',
+        'Chromium on this desktop can browse a web server running *inside* this box: try `http://localhost` in it, with Ctrl+U for the source.',
+        'Kathmandu runs 5h45m ahead of UTC. Yes, 45.',
+    ]))],
+    [/(favou?rite|prefer(red)?) (?!(distro|os|operating system|editor|language|tool|terminal|shell|setup|wm|window manager)\b)[a-z]+/, () => ccSay("Neox hasn't written that one down anywhere on this box, so I'd only be guessing. On this desktop, though, my pick would be Fretwork in the arcade (Alt+G).")],
+    [/how old|\bage\b|birthday|born/, () => ccSay("That's not something Neox has put on this box. If it matters, email is the way: mnshchtri@gmail.com.")],
+    [/salary|\brates?\b|how much (do|does) (he|she|they|neox) charge|cost of hiring/, () => ccSay("Rates aren't something I'd guess at. Best to ask directly: mnshchtri@gmail.com. The CV is one `resume` away.")],
+    [/remote|relocat|visa|available|open to work|looking for (a )?(job|work|role)|hiring/, async () => {
+        await ccBash('grep -i location ~neox/contact.txt');
+        await ccSay('Based in Kathmandu and open to remote work. For anything more specific, like availability or relocation, email mnshchtri@gmail.com.');
+    }],
+    [/where (is|does) (he|she|they|neox|manish) (live|from|based)|location|where.*(based|located)/, async () => {
+        await ccBash('grep -i location ~neox/contact.txt');
+    }],
+    [/blogs?|medium|articles?|writ(e|es|ing)/, async () => {
+        await ccBash('ls ~neox/links');
+        await ccSay("The writing lives on Medium: `open medium`, or `blogs` to list it. There are notes in Obsidian too (Alt+Shift+O).");
+    }],
+    [/youtube|beatstars|beats|producer/, () => ccFromFile('~neox/music/README.txt', 6)],
+    [/website|homepage|personal site/, () => ccSay('Neox\'s main site is https://manishkarki7.com.np, though you\'re arguably on the more fun one.')],
+    [/(favou?rite|prefer(red)?|best) (distro|os|operating system|editor|language|tool|terminal|shell|setup|wm|window manager)/, async () => {
+        await ccBash('grep -iE "^(OS|Languages)" ~neox/skills.txt');
+        await ccSay('Daily driver is Arch with Omarchy and Hyprland, as you can probably tell. Editor-wise, `$EDITOR` on this box is nvim.');
+    }],
+    [/hobb(y|ies)|free time|outside (of )?work|for fun|\binterests?\b/, async () => {
+        await ccBash('grep -iE "guitar|music" ~neox/about.txt');
+        await ccSay('Guitar, music production, and lately audio DSP code, where music and code meet. Plus building tools for the fun of it.');
+    }],
+    [/why (did|does) (he|she|they|neox|manish)|motivation|why security|why devsecops/, async () => {
+        await ccBash('head -6 ~neox/about.txt | tail -4');
+        await ccSay("Came up through offensive security, breaking things on purpose, and moved to building and defending them. The about file puts it best: *make, break and reimagine systems*.");
+    }],
+    [/what (are|is) (you|this) (built|made|written) (with|in)|tech stack of (this|the) site|how does this (site|work)/, () => ccSay("This site is plain JavaScript, HTML and CSS with no framework and no build step: a virtual filesystem, a bash-like shell, a tiling window manager and a pile of apps. VS Code on the desktop (Alt+Shift+N) shows the source.")],
+    [/what can you do|your (abilities|skills)|how can you help/, () => ccSay("I can show you around, read Neox's files and summarise them, explain security and Linux terms, open apps, run commands to demonstrate things, and nudge you through the CTF without spoiling it. Try me.")],
+    [/you('?re| are) (smart|cool|great|awesome|amazing|helpful|the best)|good bot|love (you|this)|nice work|well done|impressive/, () => ccSay(pick(['Thanks! The credit goes to whoever built this box, though.', "Appreciate it. Neox put a lot into this place; I just know where things are.", 'Thank you! Glad you\'re enjoying it.']))],
+    [/you('?re| are) (dumb|stupid|useless|bad|wrong)|bad bot|this sucks/, () => ccSay(pick(["Fair. I'm better on some things than others. Try asking about Neox's work or the CTF; that's my home ground.", "Sorry about that. Rephrase it, or ask me something about this box, and I'll do better."]))],
+    [/^(lol|lmao|haha+|hehe|rofl|xd)\b/, () => ccSay(pick(['Glad something landed. What next?', 'Ha. What would you like to look at?']))],
+    [/^(ok|okay|cool|nice|great|awesome|got it|i see|alright|hmm+|interesting)[.!]*$/, () => ccSay(pick(['Anything else you want to explore?', 'What would you like to look at next?', 'Want a hint on the CTF, or something about Neox?']))],
+    [/good (night|bye)|gn\b/, () => ccSay('Good night! The box will be here tomorrow, flags and all.')],
+    [/what should i (do|try|ask)|any (ideas|suggestions)|bored/, async () => {
+        const next = ccNextCtf();
+        await ccSay(`A few ideas: ${next ? `crack **${next.name}** in the CTF, ` : ''}play Fretwork in the arcade (Alt+G), open the InfraEye demo and hit "Simulate incident" (Alt+I), or try \`htop\` and \`cmatrix\` here. Want me to start one?`);
+        cc.offer = () => (next ? ccCtfHint(next) : ccOpenApp('arcade'));
+    }],
+];
+
+// Typos: unknown words within one edit of a vocabulary word get corrected before matching.
+const CC_VOCAB = ['neox', 'manish', 'projects', 'project', 'experience', 'skills', 'resume', 'contact', 'education', 'certifications', 'kubernetes', 'challenge', 'password', 'browser', 'arcade', 'games', 'music', 'wallpaper', 'theme', 'shortcuts', 'hidden', 'quests', 'infraeye', 'deployforge', 'cyberlynx', 'trimurtisec', 'secaudit', 'citytech', 'hint', 'flag', 'root', 'tour', 'help', 'about', 'what', 'where', 'who', 'how', 'open', 'show', 'tell'];
+
+function ccFixTypos(q) {
+    return q.split(' ').map((w) => {
+        if (w.length < 4 || CC_VOCAB.includes(w) || CC_STOP.has(w)) return w;
+        const fix = CC_VOCAB.find((v) => Math.abs(v.length - w.length) <= 1 && editDistance(v, w) === 1);
+        return fix || w;
+    }).join(' ');
+}
+
 async function ccAnswer(raw) {
-    const q = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+    const q = ccFixTypos(raw.toLowerCase().replace(/[‘’]/g, "'").replace(/[!?.,]+$/g, '').replace(/\s+/g, ' ').trim());
     const offer = cc.offer;
     cc.offer = null;
     if (offer && CC_YES.test(q)) return offer(q);
     if (offer && CC_NO.test(q)) return ccSay(pick(['No problem. What would you like to do instead?', 'Sure thing. Anything else on your mind?']));
-    if (CC_MORE.test(q) && cc.last?.ch) return ccCtfHint(cc.last.ch);
-    if (CC_MORE.test(q) && offer) return offer(q);
+    if (CC_MORE.test(q) || /tell me more|go on|more (about|on) (that|it|this)|elaborate|details?$/.test(q)) {
+        if (cc.last?.ch) return ccCtfHint(cc.last.ch);
+        if (cc.last?.topic === 'file') return ccMoreFile();
+        if (cc.last?.topic === 'filedone') return ccSay(pick(["That was the whole file, there's no more in it. Want something related, like the other projects or the CV?", "That's everything in that one. What else would you like to see?"]));
+        if (offer) return offer(q);
+        if (cc.last?.topic === 'projects') return ccFromFile('~neox/projects/infra-eye.md', 12);
+        if (cc.last?.topic === 'about') return ccExperience();
+    }
     if ((CC_YES.test(q) || CC_NO.test(q)) && q.split(' ').length <= 3) {
         await ccSay(pick(['Alright! What would you like to do: a tour, Neox\'s work, or the CTF?', 'Okay. Ask me anything about this box, or say "tour" and I\'ll show you around.']));
         cc.offer = () => ccTour();
         return;
     }
-    for (const [re, reply] of CC_INTENTS) {
+    // Specific things first: a named project or job, a command, a term.
+    const file = CC_FILES.find(([re]) => re.test(q));
+    const askedAbout = /what|tell|about|explain|describe|more|show|who|where|which|how|details?|info/.test(q) || q.split(' ').length <= 3;
+    if (file && askedAbout && !/^(open|launch|play)\b/.test(q)) return ccFromFile(file[1]);
+    const cmd = ccCommandIn(q);
+    if (cmd) {
+        const { usage, desc } = COMMANDS[cmd];
+        await ccSay(`\`${cmd}\`: ${desc}.\n\nUsage: \`${usage}\`. \`man ${cmd}\` has the details${['ls', 'cat', 'grep', 'find', 'nmap', 'ps', 'df', 'free', 'uptime', 'whoami', 'id'].includes(cmd) ? ', or I can run it for you. Want to see it in action?' : '.'}`);
+        if (['ls', 'cat', 'grep', 'find', 'nmap', 'ps', 'df', 'free', 'uptime', 'whoami', 'id'].includes(cmd)) {
+            const demo = { ls: 'ls -la', cat: 'cat ~neox/skills.txt', grep: 'grep -i kubernetes ~neox/skills.txt', find: 'find ~neox -name "*.md" -maxdepth 2', nmap: 'nmap localhost', ps: 'ps aux | head -8', df: 'df -h', free: 'free -h', uptime: 'uptime', whoami: 'whoami', id: 'id' }[cmd];
+            cc.offer = () => ccBash(demo);
+        }
+        return;
+    }
+    // "What does he do with Kubernetes?" is about Neox, not the term: search the files instead.
+    const aboutPerson = /\b(he|his|him|she|her|they|their|neox|manish)\b/.test(q);
+    if (aboutPerson && CC_TERMS.some(([re]) => re.test(q)) && await ccSearch(q)) return;
+    const term = /what('?s| is| are| does)|explain|meaning|define|mean\b/.test(q) && CC_TERMS.find(([re]) => re.test(q));
+    if (term) {
+        await ccSay(term[1]);
+        return;
+    }
+    // The specific small-talk and career questions first, then the broad topics.
+    for (const [re, reply] of [...CC_MORE_INTENTS, ...CC_INTENTS]) {
         if (re.test(q)) return reply(q, raw);
     }
-    return ccFallback();
+    const anyTerm = CC_TERMS.find(([re]) => re.test(q));
+    if (anyTerm) return ccSay(anyTerm[1]);
+    return ccFallback(q);
 }
 
 // ---------- the session ----------
