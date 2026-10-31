@@ -20,6 +20,7 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `infraeye.js` — a demo of InfraEye with simulated data, in the real app's dark theme: live dashboard, servers, Kubernetes, alert rules (with a **Simulate incident** that shows self-healing end to end) and scripted Netra answers. Alt+I or `infraeye`.
 - `games.js` — Neox Arcade, seven original retro games on a pixel canvas: Packet Snake, Firewall (shooter), Riff Runner (runner), Night Shift (build by day, defend by night), Patch Panel (cable puzzle), Drone Drop (lander) and Fretwork (rhythm, with a backing band synthesised live) with chiptune sound and saved high scores, plus `bruteforce`, a code-breaking game for the terminal.
 - `obsidian.js` — Obsidian with the public **Neox Vault** (`~/Documents/Neox Vault`): wikilinks, backlinks, tags, search and the graph view. The notes are written in this file.
+- `analytics.js` — privacy-friendly visitor analytics via [GoatCounter](https://www.goatcounter.com): no cookies, one-per-visit events (Hire me clicks, CV opened/downloaded, got root, games played, apps opened, command names). Off until `ANALYTICS.goatcounter` is set, and off on localhost, with Do Not Track / Global Privacy Control, or after `analytics off`. Visitors can run `privacy` to see exactly what's counted.
 - `assets/og.jpg` — the link-preview image (1200×630) used by LinkedIn, X, WhatsApp and Slack.
 - `assets/` — `wallpapers/` (the 31 backgrounds from my Omarchy themes, plus thumbnails) and `wallpaper.jpg` (terminal background).
 

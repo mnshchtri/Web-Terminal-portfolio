@@ -1605,6 +1605,7 @@ function arcadeApp(startId = null) {
     const api = { sfx: playSfx };
 
     function startGame(def) {
+        track(`game-${def.id}`, `Played ${def.name}`);
         current = def;
         game = def.create(api);
         phase = 'ready';
@@ -1843,6 +1844,7 @@ function arcadeApp(startId = null) {
 // ---------- bruteforce (terminal) ----------
 
 async function cmdBruteforce() {
+    track('game-bruteforce', 'Played bruteforce');
     const pin = [...'0123456789ABCDEF'].sort(() => Math.random() - 0.5).slice(0, 4).join('');
     print([
         c('ok', 'BRUTEFORCE v1.0') + c('dim', ' — authorised targets only, obviously'),

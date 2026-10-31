@@ -77,6 +77,7 @@ function openApp(app, { fromCommand } = {}) {
     if (!fromCommand && focusedBusy()) return flashBusy();
     const el = newWindowEl(`gui ${app.cls}`);
     const win = { id: wm.nextId++, ws: wm.active, el, app, full: false };
+    track(`app-${app.cls}`);
     app.mount(el, win);
     return addWindow(win, () => focusWindow(win), fromCommand);
 }
@@ -693,6 +694,7 @@ const flag = getNode('/root/flag.txt');
 if (flag) flag.onRead = () => {
     if (flag.celebrated) return;
     flag.celebrated = true;
+    track('ctf-root', 'Got root');
     notify('Achievement unlocked: root', 'You escalated from guest to root. Nicely done.');
 };
 
