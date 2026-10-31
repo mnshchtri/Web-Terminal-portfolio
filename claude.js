@@ -583,6 +583,11 @@ async function cmdClaude({ args }) {
         ccLeaving = false;
         return;
     }
+    // Like a full-screen TUI, the session gets a clean terminal (the alternate screen); the shell's
+    // scrollback comes back on exit.
+    const screen = output;
+    const scrollback = document.createDocumentFragment();
+    scrollback.append(...screen.childNodes);
     ccWelcome();
     ccInputMode(true);
     try {
@@ -607,6 +612,8 @@ async function cmdClaude({ args }) {
     } finally {
         ccInputMode(false);
         ccLeaving = false;
+        screen.replaceChildren(scrollback);
+        screen.parentElement.scrollTop = screen.parentElement.scrollHeight;
     }
     state.status = 0;
 }
