@@ -443,7 +443,7 @@ const LAUNCH = [
     { name: 'GitHub Repositories', hint: 'gh repo list', run: 'gh repo list' },
     { name: 'Weather', hint: 'weather', run: 'weather' },
     { name: 'Fastfetch', hint: 'neofetch', run: 'neofetch' },
-    { name: 'Get Root', hint: 'hint', run: 'hint' },
+    { name: 'NeoxCTF (capture the flag)', hint: 'ctf', run: 'ctf' },
     { name: 'Matrix', hint: 'cmatrix', run: 'cmatrix' },
     { name: 'Screensaver', hint: 'idle 150s', action: () => showScreensaver() },
     ...THEMES.map((t) => ({ name: `Theme: ${t}`, hint: 'theme', action: () => cmdTheme({ args: [t] }) })),
@@ -693,7 +693,7 @@ const flag = getNode('/root/flag.txt');
 if (flag) flag.onRead = () => {
     if (flag.celebrated) return;
     flag.celebrated = true;
-    notify('Achievement unlocked: root', 'You escalated from guest to root. Nicely done.');
+    notify('Achievement unlocked: root', 'You escalated from guest to root. Now submit the flag: ctf submit flag{…}');
 };
 
 // ---------- startup ----------

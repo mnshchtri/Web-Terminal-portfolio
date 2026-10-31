@@ -127,6 +127,7 @@ const newSession = () => ({
     depth: 0,
     busy: false,
     abort: false,
+    quietErr: false, // set while a command runs with 2>/dev/null
     skip: false,
     pending: null,
     keyWaiter: null,
@@ -166,7 +167,7 @@ function print(lines) {
 }
 
 function err(msg) {
-    print(c('err', esc(msg)));
+    if (!state.quietErr) print(c('err', esc(msg)));
     state.status = 1;
 }
 
@@ -768,7 +769,7 @@ function cmdHelp() {
         ...Object.entries(groups).flatMap(([g, names]) => [c('hl', g), row(names), '']),
         `Shell features: pipes ${c('y', '|')}, redirection ${c('y', '&gt; &gt;&gt;')}, ${c('y', '&amp;&amp; || ;')}, ${c('y', '$VARS')}, globs ${c('y', '*')}, ${c('y', '!!')}, scripts ${c('y', './x.sh')}`,
         `Keys: Tab completes, ↑/↓ history, Ctrl+L clear, Ctrl+C interrupt, Ctrl+A/E/U line editing`,
-        `Type ${c('exe', 'man &lt;command&gt;')} for details. New here? ${c('exe', 'cat README.md')}. Feeling brave? ${c('exe', 'hint')}`,
+        `Type ${c('exe', 'man &lt;command&gt;')} for details. New here? ${c('exe', 'cat README.md')}. Feeling brave? ${c('exe', 'ctf')}`,
     ];
 }
 
@@ -1099,9 +1100,13 @@ function tokenize(line) {
         const ch = line[i];
         const two = line.slice(i, i + 2);
         const tilde = ch === '~' && !cur && line.slice(i).match(/^~([a-z_][\w-]*)?(?=[\s/;|&>]|$)/);
+        const stderr = !cur && line.slice(i).match(/^2>(&1)?/);
         if (/\s/.test(ch)) {
             push();
             i++;
+        } else if (stderr) {
+            tokens.push({ type: 'op', value: stderr[0] });
+            i += stderr[0].length;
         } else if (two === '&&' || two === '||' || two === '>>') {
             push();
             tokens.push({ type: 'op', value: two });
@@ -1167,6 +1172,12 @@ function parse(tokens) {
             const target = tokens[++i];
             if (target?.type !== 'word') throw new Error("syntax error near unexpected token `newline'");
             cmd.redirect = { append: t.value === '>>', path: target.value };
+        } else if (t.value === '2>') {
+            // Errors are discarded wherever they're sent (usually 2>/dev/null); 2>&1 is accepted as is.
+            if (tokens[++i]?.type !== 'word') throw new Error("syntax error near unexpected token `newline'");
+            cmd.quietErr = true;
+        } else if (t.value === '2>&1') {
+            continue;
         } else if (t.value === '|') {
             endCmd();
         } else {
@@ -1248,6 +1259,7 @@ function editDistance(a, b) {
 
 function redirect({ path, append }, lines) {
     const abs = normalize(path);
+    if (abs === '/dev/null') return;
     const parent = getNode(parentOf(abs));
     const text = lines.length ? lines.map(toText).join('\n') + (lines.noNewline ? '' : '\n') : '';
     if (parent?.type !== 'dir') return err(`nsh: no such file or directory: ${path}`);
@@ -1259,9 +1271,10 @@ function redirect({ path, append }, lines) {
 async function runPipeline(cmds) {
     let stdin = null;
     for (let i = 0; i < cmds.length; i++) {
-        const { words, redirect: redir } = cmds[i];
+        const { words, redirect: redir, quietErr } = cmds[i];
         const last = i === cmds.length - 1;
-        const out = await exec(words.flatMap(expandGlob), stdin, !last || !!redir);
+        state.quietErr = !!quietErr;
+        const out = await exec(words.flatMap(expandGlob), stdin, !last || !!redir).finally(() => { state.quietErr = false; });
         if (redir) redirect(redir, out);
         if (last && !redir) print(out);
         stdin = redir ? '' : out.map(toText).join('\n') + (out.length && !out.noNewline ? '\n' : '');

@@ -1862,6 +1862,7 @@ async function cmdBruteforce() {
         const near = [...guess].filter((d, i) => pin[i] !== d && pin.includes(d)).length;
         print(`  ${esc(guess)}  ${c('ok', '●'.repeat(exact))}${c('y', '○'.repeat(near))}${exact + near ? '' : c('dim', '·')}`);
         if (exact === 4) {
+            ctfSolve('pin');
             const scores = hiScores();
             const best = !scores.bruteforce || n < scores.bruteforce;
             if (best) {

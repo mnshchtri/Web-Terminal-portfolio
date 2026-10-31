@@ -8,6 +8,8 @@ const file = (content) => ({ type: 'file', content: content.replace(/^\n/, '') }
 const link = (target) => ({ type: 'link', target });
 // Private nodes are only readable by their owner (and root).
 const secret = (node, mode) => Object.assign(node, { private: true, mode });
+// Flags are stored XOR-veiled so grepping the source for "flag{" doesn't hand them out (see ctf.js).
+const unveil = (veiled) => [...atob(veiled)].map((ch, i) => String.fromCharCode(ch.charCodeAt(0) ^ 'neox'.charCodeAt(i % 4))).join('');
 
 const FS = dir({
     bin: dir(),   // filled with the command list at startup
@@ -31,12 +33,14 @@ Welcome to NeoxOS — the personal system of Manish Karki (Neox).
   * Start here:   cat README.md
   * Commands:     help
   * Overview:     neofetch
-  * Challenge:    there's a flag in /root. Can you get root?  (stuck? hint)
+  * Challenge:    NeoxCTF — 6 flags hidden on this box, plus secret quests.  (start: ctf)
 `),
         passwd: file(`
 root:x:0:0:root:/root:/bin/bash
 neox:x:1000:1000:Manish Karki:/home/neox:/bin/bash
 visitor:x:1001:1001:Guest:/home/neox:/bin/bash
+backup:x:34:34:backup:/var/backups:/bin/bash
+http:x:33:33:http:/srv/http:/usr/bin/nologin
 postgres:x:970:970:PostgreSQL user:/var/lib/postgres:/usr/bin/nologin
 wazuh:x:965:965:Wazuh agent:/var/ossec:/usr/bin/nologin
 nobody:x:65534:65534:Kernel Overflow User:/:/usr/bin/nologin
@@ -102,8 +106,10 @@ It's a desktop too (Alt stands in for Super):
   Alt+Space launcher · Alt+F fullscreen · Alt+Shift+Space backgrounds · Alt+Ctrl+Space next one
   wallpaper list · chromium wiki.archlinux.org · nautilus ~/projects
 
-There's also a flag in /root. You start as a guest with no sudo. Get root.
-  (stuck? run: hint)
+It's also a CTF: six flags are hidden on this box (web, network, cloud,
+forensics, privesc...) plus secret quests nobody will tell you about.
+  ctf                        the scoreboard
+  ctf info 1                 where to start
 
 Tip: Tab completes, ↑/↓ walks history, Ctrl+L clears, Ctrl+C interrupts.
 Broke something? reboot puts everything back.
@@ -417,7 +423,9 @@ aGluZy4gR29vZCBpbnN0aW5jdHMgdGhvdWdoIOKAlCBrZWVwIGdvaW5nLg==
 You found it. Curiosity is the whole job.
   — neox
 
-flag{n3v3r_st0p_3xpl0r1ng}
+${unveil('CAkOHxULXA5dFzALGlUfJ10dHxReF14WCRg=')}
+
+That's flag 1 of NeoxCTF. Submit it: ctf submit flag{...}
 `),
         }),
     }),
@@ -428,12 +436,13 @@ flag{n3v3r_st0p_3xpl0r1ng}
  |   / (_) | (_) || | | _|| |) |_|
  |_|_\\___/ \\___/ |_| |___|___/(_)
 
-flag{pr1v3sc_v14_sh3ll_h1st0ry}
+${unveil('CAkOHxUVHUkYVhwbMRNeTDEWB0sCCTAQXxYbSBwcEg==')}
 
 You enumerated the box, found a credential leaked in shell history, pivoted
 to a user with sudo rights and escalated to root. That's a real attack path,
 and finding (then fixing) exactly this kind of thing is my day job.
 
+Submit it: ctf submit flag{...} — then go find the rest (ctf).
 Enjoyed it? Let's talk: mnshchtri@gmail.com
 `),
         '.bash_history': file(`
@@ -444,12 +453,26 @@ kubectl get pods -A
 # note to self: never, ever run  rm -rf --no-preserve-root /
 `),
     }), 'drwx------'),
+    dev: dir({ null: file('') }),   // ctf.js adds /dev/shm
     tmp: dir(),
     var: dir({
         log: dir({
+            // The trail for the "Persistence" challenge in ctf.js.
             'auth.log': file(`
-sshd[1337]: Accepted publickey for neox from 127.0.0.1
-sudo: visitor : user NOT in sudoers ; TTY=pts/0 ; PWD=/home/neox ; COMMAND=/bin/bash
+Oct 30 21:02:11 neox sshd[1201]: Accepted publickey for neox from 127.0.0.1 port 40112 ssh2
+Oct 31 02:11:03 neox sshd[2211]: Invalid user admin from 203.0.113.66 port 51122
+Oct 31 02:11:03 neox sshd[2211]: Failed password for invalid user admin from 203.0.113.66 port 51122 ssh2
+Oct 31 02:11:09 neox sshd[2214]: Failed password for invalid user oracle from 203.0.113.66 port 51188 ssh2
+Oct 31 02:11:15 neox sshd[2219]: Failed password for root from 203.0.113.66 port 51240 ssh2
+Oct 31 02:11:22 neox sshd[2223]: Failed password for root from 203.0.113.66 port 51302 ssh2
+Oct 31 02:12:40 neox sshd[2251]: Failed password for backup from 203.0.113.66 port 51666 ssh2
+Oct 31 02:13:58 neox sshd[2270]: Failed password for backup from 203.0.113.66 port 51804 ssh2
+Oct 31 02:14:47 neox sshd[2290]: Accepted password for backup from 203.0.113.66 port 51990 ssh2
+Oct 31 02:14:47 neox sshd[2290]: pam_unix(sshd:session): session opened for user backup(uid=34)
+Oct 31 02:15:02 neox sudo:   backup : TTY=pts/3 ; PWD=/tmp ; USER=root ; COMMAND=/usr/bin/install -m 644 /tmp/.u /etc/cron.d/.sys-update
+Oct 31 02:15:09 neox sudo:   backup : TTY=pts/3 ; PWD=/tmp ; USER=root ; COMMAND=/usr/bin/rm -f /tmp/.u
+Oct 31 02:15:40 neox sshd[2290]: Disconnected from user backup 203.0.113.66 port 51990
+Oct 31 09:00:01 neox sudo: visitor : user NOT in sudoers ; TTY=pts/0 ; PWD=/home/neox ; COMMAND=/bin/bash
 `),
         }),
     }),

@@ -1215,6 +1215,8 @@ td .ie-meter { width: 60px; flex: none; }
 
 .bar-hire:hover { background: var(--accent) !important; color: var(--black) !important; }
 
+.bar-ctf span { margin-left: 3px; font-size: 11px; font-variant-numeric: tabular-nums; }
+
 .win.gui.resume { background: #e9ebef; opacity: 1; }
 
 .cv-bar {

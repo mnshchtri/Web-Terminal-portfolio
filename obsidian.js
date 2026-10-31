@@ -30,7 +30,7 @@ DevSecOps engineer who came up through offensive security. This vault is the pub
 - [[Music]] · [[Audio DSP]] · [[Now]]
 
 > [!tip] Try it live
-> This whole site is a Linux box. There's a flag in \`/root\` — see [[Privilege escalation]] for the mindset.
+> This whole site is a Linux box. It's also a CTF: six flags and some hidden quests (run \`ctf\`). For the root one, see [[Privilege escalation]] for the mindset.
 
 #index`,
 
@@ -243,7 +243,7 @@ Linux checklist, in the order I actually run it:
 5. Credentials in configs, environment, backups
 
 > [!tip] Practice on this site
-> You start as \`visitor\` on this very box. Open a terminal (Alt+Enter) and try to read \`/root/flag.txt\`. Stuck? Run \`hint\`.
+> You start as \`visitor\` on this very box. Open a terminal (Alt+Enter) and try to read \`/root/flag.txt\`. Stuck? Run \`ctf hint 6\`. The scoreboard (\`ctf\`) has five more challenges.
 
 The defensive side: [[secaudit]] and [[Zero Trust]]. Practised at [[InRED Labs]].
 

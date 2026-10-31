@@ -5,7 +5,7 @@ https://mnshchtri.github.io/Web-Terminal-portfolio/
 
 **Recruiters:** https://mnshchtri.github.io/Web-Terminal-portfolio/#resume skips the boot and opens my one-page CV (Download PDF is one click). On the desktop, it's the **Hire me** button in the top bar.
 
-Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-eye`, `weather`, `gh repo list`, `git clone https://github.com/mnshchtri/infra-eye`, `theme list` — or run `hint` and try to get root.
+Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-eye`, `weather`, `gh repo list`, `git clone https://github.com/mnshchtri/infra-eye`, `theme list` — or run `ctf` and start hunting flags.
 
 ## Layout
 - `fs.js` — the virtual filesystem. **All portfolio content lives here** (about, experience, projects, links…), plus the files behind the root challenge. Edit the text; URLs are auto-linked.
@@ -18,6 +18,7 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `vscode.js` — VS Code: explorer, tabs, syntax highlighting, search, source control with live commits, quick open (Ctrl+P) and an integrated `nsh` terminal (Ctrl+\`). Opens this site's own source in `~/code/Web-Terminal-portfolio`.
 - `resume.js` — the résumé window, its print/PDF layout, the Hire me button and the `#resume` link. Its `RESUME` data follows my CV (without my phone number); the plain-HTML summary at the top of `index.html` is for search engines, screen readers and no-JavaScript visitors, so keep both in step.
 - `infraeye.js` — a demo of InfraEye with simulated data, in the real app's dark theme: live dashboard, servers, Kubernetes, alert rules (with a **Simulate incident** that shows self-healing end to end) and scripted Netra answers. Alt+I or `infraeye`.
+- `ctf.js` — NeoxCTF: the scoreboard (`ctf`), the challenge files and services (a staging web server on `curl localhost`, a port-knock daemon guarding 31337, a Kubernetes RBAC misconfiguration, an intruder's cron implant), the tools they need (`find`, `file`, `strings`, `tr`, `rev`, `nc`, `knock`, `crontab`) and the hidden quests.
 - `games.js` — Neox Arcade, seven original retro games on a pixel canvas: Packet Snake, Firewall (shooter), Riff Runner (runner), Night Shift (build by day, defend by night), Patch Panel (cable puzzle), Drone Drop (lander) and Fretwork (rhythm, with a backing band synthesised live) with chiptune sound and saved high scores, plus `bruteforce`, a code-breaking game for the terminal.
 - `obsidian.js` — Obsidian with the public **Neox Vault** (`~/Documents/Neox Vault`): wikilinks, backlinks, tags, search and the graph view. The notes are written in this file.
 - `analytics.js` — visitor analytics via [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/): cookie-free page views, referrers, countries, devices and page-load speed. Off until `CLOUDFLARE_ANALYTICS_TOKEN` is set, and off on localhost, with Do Not Track / Global Privacy Control, or after `analytics off`. Visitors can run `privacy` to see what's counted.
@@ -47,7 +48,9 @@ Alt stands in for Super, which the OS or browser keeps for itself.
 
 No build step — open `index.html` or push to deploy.
 
-## The root challenge
-Visitors start as `visitor` with no sudo rights, and there's a flag in `/root/flag.txt`. Getting it takes real Linux privilege-escalation thinking. Reading this source won't hand you the password: only its SHA-256 is stored. Stuck? Run `hint` in the shell, once per nudge. `reboot` resets everything.
+## NeoxCTF
+The box is a small capture-the-flag. Six challenges, each a real attack path in miniature (recon, web, network, cloud, forensics and privilege escalation), plus four hidden quests that never appear on the scoreboard until someone finds them. Visitors start as `visitor` with no sudo rights. `ctf` shows the scoreboard, `ctf info N` the brief, `ctf hint N` one nudge at a time, and `ctf submit flag{…}` scores. Progress is saved in the browser and survives `reboot`.
+
+Reading this source isn't a shortcut. Flags are checked against SHA-256 hashes, the ones the challenges print are XOR-veiled (`unveil` in `fs.js`), and only the root password's hash is stored.
 
 To change the password, set `NEOX_PASSWORD_SHA256` in `script.js` (`printf %s 'new-pass' | sha256sum`) and update the base64-encoded leak in `fs.js` to match.
