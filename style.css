@@ -1453,3 +1453,49 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
     .tabs { display: none; }
     .vs-side, .vs-act { display: none; }
 }
+
+/* ---------- pages served from the box (ctf.js): localhost, view-source:, ctf.neox ---------- */
+
+.page-text { margin: 0; padding: 12px 16px; min-height: 100%; box-sizing: border-box; background: #fff; color: #111; font: 13px/1.5 var(--font); white-space: pre-wrap; }
+.view-source { background: #fff; color: #1a1aa6; }
+.view-source .ln { display: inline-block; width: 3em; margin-right: 1em; color: #999; text-align: right; user-select: none; }
+.local-page { min-height: 100%; }
+
+.ctfw { max-width: 980px; margin: 0 auto; padding: 22px 24px 30px; }
+.ctfw a { color: var(--accent); cursor: pointer; }
+.ctfw .exe { padding: 0 4px; border-radius: 4px; background: var(--panel); color: var(--green); }
+.ctfw-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: flex-end; }
+.ctfw-head h1 { margin: 0 0 4px; font-size: 26px; color: var(--accent); }
+.ctfw-head p { margin: 0; color: var(--dim); max-width: 520px; }
+.ctfw-score { min-width: 220px; text-align: right; }
+.ctfw-score b { font-size: 24px; }
+.ctfw-score span { display: block; color: var(--yellow); }
+.ctfw-bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--panel); overflow: hidden; }
+.ctfw-bar i { display: block; height: 100%; background: var(--green); }
+.ctfw-submit { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 18px 0 10px; }
+.ctfw-submit input { flex: 1; min-width: 220px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 8px; outline: none; background: var(--panel); color: var(--fg); font: inherit; }
+.ctfw-submit input:focus { border-color: var(--accent); }
+.ctfw button { padding: 8px 14px; border: 1px solid var(--accent); border-radius: 8px; background: transparent; color: var(--fg); font: inherit; cursor: pointer; }
+.ctfw button:hover { background: var(--accent); color: var(--black); }
+.ctfw-msg { width: 100%; min-height: 1.4em; }
+.ctfw-msg.bad { color: var(--red); }
+.ctfw-msg.dim, .ctfw-how, .ctfw-foot { color: var(--dim); }
+.ctfw-how { margin: 0 0 16px; }
+.ctfw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+.ctfw-card { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-top: 3px solid var(--cat, var(--dim)); border-radius: 8px; background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.ctfw-card h3 { margin: 0; font-size: 15px; }
+.ctfw-card p, .ctfw-card ol { margin: 0; font-size: 13px; line-height: 1.5; }
+.ctfw-card ol { padding-left: 18px; color: var(--fg); }
+.ctfw-card .ctfw-hint { align-self: flex-start; margin-top: auto; padding: 4px 10px; font-size: 12px; }
+.ctfw-card-head { display: flex; justify-content: space-between; font-size: 12px; }
+.ctfw-cat { color: var(--cat); text-transform: uppercase; letter-spacing: 0.06em; }
+.ctfw-card.done { border-color: color-mix(in srgb, var(--green) 50%, transparent); border-top-color: var(--cat); }
+.ctfw-card.done .ctfw-pts, .ctfw-ok { color: var(--green); }
+.ctfw-card.locked { border-style: dashed; color: var(--dim); }
+.ctfw-sub { margin: 24px 0 10px; font-size: 15px; color: var(--dim); }
+.ctfw-cert { margin: 0 0 16px; padding: 14px 18px; border: 2px double var(--yellow); border-radius: 8px; text-align: center; }
+.ctfw-cert h2 { margin: 0 0 4px; color: var(--yellow); letter-spacing: 0.1em; text-transform: uppercase; }
+.ctfw-cert p { margin: 2px 0; }
+.ctfw-foot { margin-top: 22px; font-size: 12px; }
+.ctfw-foot button { padding: 2px 8px; font-size: 12px; }
+.view:focus { outline: none; }

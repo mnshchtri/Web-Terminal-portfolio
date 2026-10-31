@@ -141,7 +141,13 @@ const NEOX_MUSIC = 'https://www.youtube-nocookie.com/embed/videoseries?list=UU-m
 const FRAME_BLOCKED = ['github.com', 'linkedin.com', 'medium.com', 'x.com', 'twitter.com', 'duckduckgo.com',
     'google.com', 'facebook.com', 'instagram.com', 'reddit.com', 'stackoverflow.com', 'youtube.com', 'archlinux.org'];
 
+// Sites served from inside the page (the CTF's localhost and ctf.neox, in ctf.js). Each handler gets a
+// URL and returns null or { html } (a page of this app's own UI), { doc, base } (a web page) or { text }.
+const LOCAL_SITES = [];
+const localSite = (url) => LOCAL_SITES.reduce((page, handler) => page || handler(url), null);
+
 const SPEED_DIAL = [
+    ['NeoxCTF', 'http://ctf.neox/'],
     ['Website', 'https://manishkarki7.com.np'],
     ['InfraEye', 'https://infraeye.manishkarki7.com.np'],
     ['Neox Music', 'https://www.youtube.com/@lynthrax'],
@@ -159,12 +165,16 @@ const SPEED_DIAL = [
 function resolveAddress(text) {
     text = text.trim();
     if (!text || text === START) return START;
+    if (/^view-source:/i.test(text)) return `view-source:${resolveAddress(text.slice(12))}`;
     if (/^https?:\/\//i.test(text)) return text;
+    // Local addresses are plain http, like a real browser's guess.
+    if (/^(localhost|127(\.\d+){3}|neox|[\w-]+\.neox)(:\d+)?(\/\S*)?$/i.test(text)) return `http://${text}`;
     if (/^[\w-]+(\.[\w-]+)+(:\d+)?(\/\S*)?$/.test(text)) return `https://${text}`;
     return `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(text)}`;
 }
 
 function hostOf(url) {
+    if (url.startsWith('view-source:')) return `view-source:${hostOf(url.slice(12))}`;
     try {
         return new URL(url).hostname.replace(/^www\./, '');
     } catch {
@@ -206,9 +216,47 @@ function browserApp(startUrl = START) {
             <button class="btn" data-open="${esc(url)}">Open in new tab</button></div>`;
     }
 
+    // Pages from LOCAL_SITES. Web pages render in a sandbox without scripts; their links are followed here.
+    function renderLocal(url, page) {
+        if (page.html != null) {
+            view.innerHTML = `<div class="local-page">${page.html}</div>`;
+            page.mount?.(view.firstElementChild, { go, reload: render });
+        } else if (page.source != null) {
+            view.innerHTML = `<pre class="page-text view-source">${page.source.split('\n').map((l, i) => `<span class="ln">${i + 1}</span>${esc(l)}`).join('\n')}</pre>`;
+        } else if (page.text != null) {
+            view.innerHTML = `<pre class="page-text">${esc(page.text)}</pre>`;
+        } else {
+            view.innerHTML = '<iframe class="local-frame" sandbox="allow-same-origin"></iframe>';
+            const frame = view.firstElementChild;
+            frame.srcdoc = page.doc;
+            frame.addEventListener('load', () => {
+                const doc = frame.contentDocument;
+                doc?.addEventListener('click', (e) => {
+                    const a = e.target.closest('a[href]');
+                    if (!a) return;
+                    e.preventDefault();
+                    go(new URL(a.getAttribute('href'), page.base || url).href);
+                });
+                // Keys pressed inside the page (Ctrl+U, Ctrl+L) reach the browser's own shortcuts.
+                doc?.addEventListener('keydown', (e) => {
+                    if (!e.ctrlKey || !['u', 'l'].includes(e.key)) return;
+                    e.preventDefault();
+                    view.dispatchEvent(new KeyboardEvent('keydown', { key: e.key, ctrlKey: true, bubbles: true }));
+                });
+            });
+        }
+    }
+
     function render() {
         const url = current();
-        if (url === START) {
+        const local = url === START ? null : localSite(url);
+        if (local) {
+            renderLocal(url, local);
+            // Keep keyboard focus in the window so Ctrl+U works again on the new page.
+            if (wm.focused === win && !win.el.contains(document.activeElement)) view.focus({ preventScroll: true });
+        } else if (url.startsWith('view-source:')) {
+            view.innerHTML = refusedPage(url);
+        } else if (url === START) {
             view.innerHTML = startPage();
             view.querySelector('.start-search').addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -250,6 +298,7 @@ function browserApp(startUrl = START) {
                 </div><div class="view"></div>`;
             addr = el.querySelector('.addr');
             view = el.querySelector('.view');
+            view.tabIndex = -1;
             tab = el.querySelector('.tab-title');
             backBtn = el.querySelector('[data-act="back"]');
             fwdBtn = el.querySelector('[data-act="fwd"]');
@@ -266,17 +315,25 @@ function browserApp(startUrl = START) {
                 if (dial) return go(dial.dataset.url);
                 const ext = e.target.closest('[data-open]');
                 if (ext) return window.open(ext.dataset.open, '_blank', 'noopener');
+                if (e.target.closest('.local-page')) return;
                 const act = e.target.closest('[data-act]')?.dataset.act;
                 if (act === 'back' && pos > 0) pos--;
                 if (act === 'fwd' && pos < hist.length - 1) pos++;
                 if (act === 'home') return go(START);
-                if (act === 'ext') return window.open(current() === START ? 'https://github.com/mnshchtri' : current(), '_blank', 'noopener');
+                if (act === 'ext') return window.open(current() === START || localSite(current()) ? 'https://github.com/mnshchtri' : current(), '_blank', 'noopener');
                 if (act) render();
             });
             el.addEventListener('keydown', (e) => {
                 if (e.ctrlKey && e.key === 'l') {
                     e.preventDefault();
                     addr.focus();
+                }
+                // Ctrl+U: view source, as in any browser (pages served from this box only).
+                if (e.ctrlKey && e.key === 'u') {
+                    e.preventDefault();
+                    const url = current();
+                    if (url.startsWith('view-source:')) go(url.slice(12));
+                    else if (url !== START) go(`view-source:${url}`);
                 }
             });
             go(startUrl);

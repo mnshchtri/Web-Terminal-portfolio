@@ -145,19 +145,28 @@ function ctfBoard() {
         out.push(...[`╔${'═'.repeat(w)}╗`, ...text.map((t) => `║   ${t.padEnd(w - 3)}║`), `╚${'═'.repeat(w)}╝`].map((l) => c('y', esc(l))),
             linkify('Screenshot this and tag me, or just say hi: mnshchtri@gmail.com'), '');
     }
+    out.push(`In Chromium (Alt+B): ${c('exe', 'http://ctf.neox')} · ${c('exe', 'ctf web')} opens it`);
     out.push(`${c('exe', 'ctf info N')} story · ${c('exe', 'ctf hint N')} nudge · ${c('exe', 'ctf submit flag{…}')} score · ${c('exe', 'ctf reset')} start over`);
     return out;
 }
 
-function ctfSubmit(flag) {
-    if (!flag) return err('usage: ctf submit flag{...}');
-    if (!/^flag\{.+\}$/.test(flag)) return err('ctf: flags look like flag{...}');
+// Checks a flag for both the terminal and the ctf.neox site: { error } or { ch, fresh }.
+function ctfCheck(flag) {
+    if (!flag) return { error: 'usage: ctf submit flag{...}' };
+    if (!/^flag\{.+\}$/.test(flag)) return { error: 'Flags look like flag{...}' };
     const ch = CTF.find((x) => x.hash === sha256(flag));
-    if (!ch) {
+    if (!ch) return { wrong: true };
+    return { ch, fresh: ctfSolve(ch.id) };
+}
+
+function ctfSubmit(flag) {
+    const { error, wrong, ch, fresh } = ctfCheck(flag);
+    if (error) return err(`ctf: ${error}`);
+    if (wrong) {
         state.status = 1;
         return [c('err', '✗ Not a flag on this box.') + c('dim', ' Close only counts in horseshoes.')];
     }
-    if (!ctfSolve(ch.id)) return [c('dim', `Already captured: ${ch.name}.`)];
+    if (!fresh) return [c('dim', `Already captured: ${ch.name}.`)];
     const score = ctfScore();
     const out = [`${c('ok', '✔ Correct!')} ${c('hl', esc(ch.name))} ${c('dim', `(${ch.cat})`)} +${ch.pts} pts · ${score}/${CTF_TOTAL} · rank: ${c('y', ctfRank(score))}`];
     const next = CTF.find((x) => !x.hidden && !ctfSolved()[x.id]);
@@ -170,6 +179,7 @@ function cmdCtf({ args }) {
     const [sub, ...rest] = args;
     if (!sub || sub === 'score' || sub === 'board') return ctfBoard();
     if (sub === 'submit') return ctfSubmit(rest.join(' ').trim());
+    if (sub === 'web') return void openApp(browserApp('http://ctf.neox/'), { fromCommand: true });
     if (sub === 'reset') {
         localStorage.removeItem('nsh_ctf');
         refreshCtfBadge();
@@ -379,7 +389,7 @@ function webServe(path) {
     if (node.type === 'dir') {
         if (!path.endsWith('/') && path) return { status: 301, body: nginxPage(301), headers: [`Location: ${path}/`] };
         if (node.children['index.html']) {
-            node = node.children['index.html'];
+            return { status: 200, body: node.children['index.html'].content, type: 'text/html' };
         } else if (node.autoindex) {
             const url = abs.slice(docroot.length) + '/';
             const rows = Object.entries(node.children).map(([n, child]) => {
@@ -413,6 +423,34 @@ function httpResponse(res, withHeaders) {
         ...(res.headers || []),
     ];
     return withHeaders ? [...head, ''] : [];
+}
+
+// The same server in Chromium: http://localhost, view-source:, and every visit counts as a knock.
+function localBrowse(url) {
+    const source = url.startsWith('view-source:');
+    let u;
+    try {
+        u = new URL(source ? url.slice(12) : url);
+    } catch {
+        return null;
+    }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    if (u.hostname === 'ctf.neox') return source ? { source: CTF_SITE_SOURCE } : ctfSite();
+    if (!/^(localhost|neox|127(\.\d+){3})$/.test(u.hostname)) return null;
+    const port = Number(u.port) || (u.protocol === 'https:' ? 443 : 80);
+    knockHit(port);
+    if (!portOpen(port)) return { html: browserError(`${u.hostname} refused to connect.`, 'ERR_CONNECTION_REFUSED') };
+    const res = localHttp(port, u.pathname);
+    if (!res) return { html: browserError(`${u.hostname} sent an invalid response.`, 'ERR_INVALID_HTTP_RESPONSE') };
+    // Follow redirects (a directory without its trailing slash), keeping links relative to the new URL.
+    if (res.status === 301) return localBrowse((source ? 'view-source:' : '') + new URL(res.headers[0].slice(10), u).href);
+    if (source) return { source: res.body };
+    return (res.type || 'text/html') === 'text/html' ? { doc: res.body, base: u.href.endsWith('/') || /\.[a-z]+$/i.test(u.pathname) ? u.href : `${u.href}/` } : { text: res.body };
+}
+LOCAL_SITES.push(localBrowse);
+
+function browserError(title, code) {
+    return `<div class="refused">${G.sad}<h2>This site can't be reached</h2><p>${esc(title)}</p><p class="dim">${code}</p></div>`;
 }
 
 const realCurl = COMMANDS.curl.run;
@@ -735,13 +773,99 @@ meltdown = (...args) => {
 
 // Safecracker is awarded by `bruteforce` in games.js.
 
+// ---------- ctf.neox: the scoreboard as a website in Chromium ----------
+
+const CTF_CAT_COLOR = { recon: 'cyan', web: 'yellow', network: 'green', cloud: 'blue', forensics: 'magenta', privesc: 'red', misc: 'dim', crypto: 'yellow' };
+
+function ctfSite() {
+    const solved = ctfSolved();
+    const score = ctfScore(solved);
+    const main = CTF.filter((ch) => !ch.hidden);
+    const card = (ch, i) => {
+        const done = !!solved[ch.id];
+        const seen = ctfHintsSeen[ch.id] || 0;
+        return `<article class="ctfw-card${done ? ' done' : ''}" style="--cat: var(--${CTF_CAT_COLOR[ch.cat]})">
+            <div class="ctfw-card-head"><span class="ctfw-cat">${esc(ch.cat)}</span><span class="ctfw-pts">${done ? '✔ ' : ''}${ch.pts} pts</span></div>
+            <h3>${i + 1}. ${esc(ch.name)}</h3>
+            <p>${esc(ch.brief).replace(/`([^`]+)`/g, (_, code) => c('exe', code))}</p>
+            ${seen ? `<ol class="ctfw-hints">${ch.hints.slice(0, seen).map((h) => `<li>${h}</li>`).join('')}</ol>` : ''}
+            ${done ? '<p class="ctfw-ok">Captured.</p>' : seen < ch.hints.length ? `<button class="ctfw-hint" data-hint="${ch.id}">${seen ? 'Another hint' : 'Show a hint'} (${seen}/${ch.hints.length})</button>` : ''}
+        </article>`;
+    };
+    const quest = (ch) => (solved[ch.id]
+        ? `<article class="ctfw-card done" style="--cat: var(--${CTF_CAT_COLOR[ch.cat]})"><div class="ctfw-card-head"><span class="ctfw-cat">${esc(ch.cat)}</span><span class="ctfw-pts">✔ ${ch.pts} pts</span></div><h3>${esc(ch.name)}</h3></article>`
+        : `<article class="ctfw-card locked"><div class="ctfw-card-head"><span class="ctfw-cat">???</span><span class="ctfw-pts">${ch.pts} pts</span></div><p>${esc(ch.clue)}</p></article>`);
+    const complete = score === CTF_TOTAL;
+    const html = `<div class="ctfw">
+        <header class="ctfw-head">
+            <div><h1>⚑ NeoxCTF</h1><p>Six flags hidden on this box, each a real attack path in miniature. Plus quests nobody will tell you about.</p></div>
+            <div class="ctfw-score"><b>${score}</b> / ${CTF_TOTAL} pts<span>rank: ${esc(ctfRank(score))}</span>
+                <div class="ctfw-bar"><i style="width:${(score / CTF_TOTAL) * 100}%"></i></div></div>
+        </header>
+        <form class="ctfw-submit"><input placeholder="flag{...}" spellcheck="false" autocomplete="off" aria-label="Flag"><button>Submit flag</button><span class="ctfw-msg" role="status"></span></form>
+        ${complete ? `<div class="ctfw-cert"><h2>Certificate of Pwnage</h2><p>Every flag and every hidden quest. Rank: legend.</p><p>Screenshot this and say hi: <a href="mailto:mnshchtri@gmail.com">mnshchtri@gmail.com</a></p></div>` : ''}
+        <p class="ctfw-how">Most challenges are solved in a terminal (Alt+Enter); <span class="exe">ctf</span> there shows this same board.
+            The web one can be done right here: try <a data-url="http://localhost/">http://localhost</a>, and <b>Ctrl+U</b> shows a page's source.</p>
+        <div class="ctfw-grid">${main.map(card).join('')}</div>
+        <h2 class="ctfw-sub">Hidden quests · ${CTF.filter((ch) => ch.hidden && solved[ch.id]).length}/${CTF.filter((ch) => ch.hidden).length} found</h2>
+        <div class="ctfw-grid">${CTF.filter((ch) => ch.hidden).map(quest).join('')}</div>
+        <p class="ctfw-foot">Progress is saved in this browser. <button class="ctfw-reset">Reset progress</button></p>
+    </div>`;
+    return {
+        html,
+        mount(root, { reload }) {
+            const form = root.querySelector('.ctfw-submit');
+            const msg = form.querySelector('.ctfw-msg');
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const input = form.querySelector('input');
+                const { error, wrong, ch, fresh } = ctfCheck(input.value.trim());
+                if (fresh) return reload();
+                msg.className = `ctfw-msg ${ch ? 'dim' : 'bad'}`;
+                msg.textContent = error || (wrong ? '✗ Not a flag on this box.' : `Already captured: ${ch.name}.`);
+                input.select();
+            });
+            root.addEventListener('click', (e) => {
+                const hint = e.target.closest('[data-hint]');
+                if (hint) {
+                    const ch = CTF.find((x) => x.id === hint.dataset.hint);
+                    ctfHintsSeen[ch.id] = Math.min((ctfHintsSeen[ch.id] || 0) + 1, ch.hints.length);
+                    reload();
+                }
+                if (e.target.closest('.ctfw-reset')) {
+                    localStorage.removeItem('nsh_ctf');
+                    refreshCtfBadge();
+                    reload();
+                }
+            });
+        },
+    };
+}
+
+// What Ctrl+U shows on ctf.neox. Its comment points at the Inspector quest.
+const CTF_SITE_SOURCE = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>NeoxCTF</title>
+  <link rel="stylesheet" href="/static/board.css">
+</head>
+<body>
+  <!-- Scoreboard is rendered client-side. Nothing to steal here, I promise. -->
+  <!-- ...but the console of the browser you're reading this in (the real one, F12) might be chattier. -->
+  <div id="board"></div>
+  <script src="/static/board.js" defer></script>
+</body>
+</html>
+`;
+
 // ---------- bar badge, launcher, commands ----------
 
 barEl.querySelector('.bar-right').insertAdjacentHTML('afterbegin', `<button class="bar-ctf" data-cmd="ctf" title="NeoxCTF scoreboard">${ICON('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>')}<span></span></button>`);
 refreshCtfBadge();
 
 Object.assign(COMMANDS, {
-    ctf: { group: 'Fun', usage: 'ctf [info N | hint N | submit FLAG | reset]', desc: 'NeoxCTF: the scoreboard for the flags hidden on this box', run: cmdCtf },
+    ctf: { group: 'Fun', usage: 'ctf [info N | hint N | submit FLAG | web | reset]', desc: 'NeoxCTF: the scoreboard for the flags hidden on this box', run: cmdCtf },
     submit: { group: 'Hidden', usage: 'submit flag{...}', desc: 'submit a CTF flag', run: ({ args }) => ctfSubmit(args.join(' ').trim()) },
     find: { group: 'Files', usage: 'find [PATH...] [-name PAT] [-type f|d] [-user U] [-maxdepth N]', desc: 'search for files in a directory hierarchy', run: cmdFind },
     file: { group: 'Files', usage: 'file FILE...', desc: 'determine file type', run: cmdFile },
