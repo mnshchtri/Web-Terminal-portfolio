@@ -332,6 +332,9 @@ const CC_INTENTS = [
         await ccBash('whoami');
         await ccSay("You're `visitor`: a guest with no sudo. Getting beyond that is the last CTF challenge.");
     }],
+    [/what('?s| is) your name|who am i talking to|do you have a name/, async () => {
+        await ccSay(pick(["Just the assistant that lives on this box. What's yours?", "Names are overrated. I'm the one who knows where everything is on this machine. What should I call you?"]));
+    }],
     [/how are you|how'?s it going|how do you do|what'?s up/, async () => {
         await ccSay(pick(['Doing well, thanks for asking! Ready when you are. Want a quick tour?', 'All good here, the box is humming along. Want me to show you around?']));
         cc.offer = () => ccTour();
@@ -361,7 +364,7 @@ const CC_INTENTS = [
         if (ch) return ccCtfHint(ch);
         await ccCtfOverview();
     }],
-    [/who is|(who|what)( is|'s|s)? (neox|manish)|about (neox|manish|the owner|the author)|^(neox|manish)\??$|who (made|built|owns|runs) (this|the site)|whose (site|portfolio)|tell me about (neox|manish)/, () => ccAbout()],
+    [/(who|what)( is|'s|s)? (neox|manish|the (owner|author|developer))|who (is|'s) (he|she|they|the guy|this person)\b|about (neox|manish|the owner|the author)|^(neox|manish)\??$|who (made|built|owns|runs) (this|the site)|whose (site|portfolio)|tell me about (neox|manish)/, () => ccAbout()],
     [/experience|worked|\bwork\b|job|career|citytech|employ/, () => ccExperience()],
     [/projects?|built|infra ?eye|deployforge|github|repos?\b/, () => ccProjects()],
     [/skills?|stack|tech|tools\b|languages?|certif/, async () => {
