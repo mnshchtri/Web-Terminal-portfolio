@@ -976,24 +976,39 @@ function audioOut() {
     }
 }
 
-function tone(freq, at, dur, { type = 'square', vol = 0.03, to = null } = {}) {
+// `out` routes the sound through a bus (so a song can be faded); `attack` softens the start for pads;
+// `cutoff` adds a low-pass filter; `detune` is in cents.
+function tone(freq, at, dur, { type = 'square', vol = 0.03, to = null, out = null, attack = 0, cutoff = 0, detune = 0 } = {}) {
     const a = audioOut();
     if (!a) return;
     at = Math.max(at, a.currentTime);
     const osc = a.createOscillator();
     const gain = a.createGain();
     osc.type = type;
+    osc.detune.value = detune;
     osc.frequency.setValueAtTime(freq, at);
     if (to) osc.frequency.exponentialRampToValueAtTime(to, at + dur);
-    gain.gain.setValueAtTime(vol, at);
+    if (attack) {
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(vol, at + attack);
+    } else {
+        gain.gain.setValueAtTime(vol, at);
+    }
     gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    osc.connect(gain).connect(a.destination);
+    let node = osc;
+    if (cutoff) {
+        const filter = a.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = cutoff;
+        node = node.connect(filter);
+    }
+    node.connect(gain).connect(out || a.destination);
     osc.start(at);
     osc.stop(at + dur + 0.02);
 }
 
 let noiseBuffer = null;
-function noise(at, dur, vol, highpass) {
+function noise(at, dur, vol, highpass, out = null) {
     const a = audioOut();
     if (!a) return;
     at = Math.max(at, a.currentTime);
@@ -1010,7 +1025,7 @@ function noise(at, dur, vol, highpass) {
     filter.frequency.value = highpass;
     gain.gain.setValueAtTime(vol, at);
     gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    src.connect(filter).connect(gain).connect(a.destination);
+    src.connect(filter).connect(gain).connect(out || a.destination);
     src.start(at);
     src.stop(at + dur);
 }
@@ -1402,13 +1417,81 @@ const FW_LANES = ['#ff4d6d', '#ffd23f', '#7cff6b', '#4de1ff'];
 const FW_LANE_X = 68;
 const FW_LANE_W = 26;
 const FW_CHORDS = [[57, 60, 64, 69], [53, 57, 60, 65], [48, 52, 55, 60], [55, 59, 62, 67]]; // Am F C G
+const FW_SCALE = [52, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81]; // A minor, E3 to A5
+
+// The song: "Kathmandu Overdrive", 124 bpm in A minor over Am F C G, two bars per chord.
+// Each section is [first bar, bars, rhythm patterns (one bar of eighths, 1 = note), arpeggio?].
+const FW_SECTIONS = [
+    [2, 8, ['10001000', '10001010', '10100010'], false],               // verse
+    [10, 8, ['10001000', '10001010', '10100010'], false],              // verse again (same melody)
+    [18, 8, ['10101010', '10101011', '11101010', '10111010'], true],   // chorus
+    [26, 8, ['10101010', '10101011', '11101010', '10111010'], true],   // chorus again
+    [34, 8, ['11101110', '11111010', '10111111', '11101011'], true],   // solo
+    [42, 2, ['10001000', '10000000'], true],                           // outro
+];
+
+// A seeded generator, so the song (and the chart) is the same every time you play.
+function fwRandom(seed) {
+    return () => {
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// The melody walks the scale and lands on chord tones on the beat. Repeated sections reuse their
+// phrase, so the verse and chorus come back like a real song's.
+function fwSong(STEP) {
+    const notes = [];
+    const phrases = {};
+    const rnd = fwRandom(1337);
+    let idx = 9;
+    for (const [first, bars, rhythms] of FW_SECTIONS) {
+        const key = rhythms.join();
+        if (!phrases[key]) {
+            const phrase = [];
+            for (let b = 0; b < Math.min(bars, 8); b++) {
+                const rhythm = rhythms[Math.floor(rnd() * rhythms.length)];
+                const chord = FW_CHORDS[Math.floor((first + b) / 2) % 4];
+                for (let e = 0; e < 8; e++) {
+                    if (rhythm[e] !== '1') continue;
+                    const leap = rnd() < 0.2 ? 2 : 1;
+                    idx = clamp(idx + (rnd() < 0.5 ? -leap : leap), 3, FW_SCALE.length - 2);
+                    if (e % 2 === 0) {
+                        // Snap strong beats to the nearest chord tone, mostly avoiding a repeat of the last note.
+                        const last = phrase.at(-1)?.pitch;
+                        const tones = FW_SCALE.map((p, i) => [p, i])
+                            .filter(([p]) => chord.some((c) => (p - c) % 12 === 0) && (p !== last || rnd() < 0.2));
+                        idx = tones.sort((x, y) => Math.abs(x[1] - idx) - Math.abs(y[1] - idx))[0][1];
+                    }
+                    phrase.push({ step: b * 8 + e, pitch: FW_SCALE[idx], len: rhythm[e + 1] === '1' ? 1 : 2 });
+                }
+            }
+            phrases[key] = phrase;
+        }
+        for (const n of phrases[key]) {
+            if (n.step >= bars * 8) continue;
+            notes.push({ t: (first * 8 + n.step) * STEP, pitch: n.pitch, len: n.len, bar: first + Math.floor(n.step / 8) });
+        }
+    }
+    // Lanes follow the melody's shape: higher notes sit further right, like frets on a neck.
+    for (let i = 0; i < notes.length; i += 8) {
+        const group = notes.slice(i, i + 8);
+        const pitches = [...new Set(group.map((n) => n.pitch))].sort((x, y) => x - y);
+        for (const n of group) n.lane = pitches.length < 2 ? 1 : Math.round((pitches.indexOf(n.pitch) / (pitches.length - 1)) * 3);
+    }
+    return notes;
+}
+
+const fwSection = (bar) => FW_SECTIONS.find(([first, bars]) => bar >= first && bar < first + bars);
 
 const FRETWORK = {
     id: 'fret',
     cmd: 'fretwork',
     name: 'Fretwork',
     keys: ['d', 'f', 'j', 'k'],
-    blurb: "Play lead on a chiptune jam. Hit each note as it reaches the line, chain hits for a multiplier, and keep the crowd on your side.",
+    blurb: "Play lead on Kathmandu Overdrive, a chiptune rock jam. Hit each note as it reaches the line to play the melody, chain hits for a multiplier, and keep the crowd on your side.",
     controls: 'D F J K  OR  ARROWS  -  TAP THE LANES',
     create(api) {
         const BEAT = 60 / 124;
@@ -1417,16 +1500,7 @@ const FRETWORK = {
         const HIT_Y = 150;
         const SPEED = 110;
         const LEAD = 2;
-        const notes = [];
-        let prev = 0;
-        for (let s = 16; s < BARS * 8; s++) {
-            const bar = Math.floor(s / 8);
-            const p = 0.22 + Math.min(0.42, bar * 0.012);
-            if (Math.random() > (s % 2 ? p * 0.55 : p + 0.18)) continue;
-            prev = (prev + 1 + rint(3)) % 4;
-            notes.push({ t: s * STEP, lane: prev, bar });
-            if (bar > 16 && Math.random() < 0.1) notes.push({ t: s * STEP, lane: (prev + 2) % 4, bar });
-        }
+        const notes = fwSong(STEP);
         const end = BARS * 8 * STEP + 1;
         let ticks = 0;
         let nextStep = 0;
@@ -1437,21 +1511,66 @@ const FRETWORK = {
         let over = false;
         let judge = null;
         let flashes = [0, 0, 0, 0];
+        let bus = null;
         const now = () => ticks / 60 - LEAD;
         const mult = () => 1 + Math.min(3, Math.floor(combo / 10));
 
-        // Drums and bass are scheduled slightly ahead on the audio clock, step by step.
+        // Everything goes through one bus with a compressor, so the band is loud but never clips,
+        // and pausing or quitting can fade it out at once.
+        function out(a) {
+            if (!bus) {
+                const comp = a.createDynamicsCompressor();
+                bus = a.createGain();
+                bus.gain.value = 0.9;
+                bus.connect(comp).connect(a.destination);
+            }
+            return bus;
+        }
+
+        function silence() {
+            if (!bus) return;
+            const a = audioCtx;
+            bus.gain.setTargetAtTime(0, a.currentTime, 0.03);
+            const old = bus;
+            setTimeout(() => old.disconnect(), 300);
+            bus = null;
+            nextStep = Math.max(0, Math.ceil(now() / STEP));
+        }
+
+        // The band is scheduled slightly ahead on the audio clock, step by step.
         function band(t) {
             const a = audioOut();
             if (!a) return;
-            while (nextStep * STEP < t + 0.12 && nextStep < BARS * 8) {
+            const o = out(a);
+            while (nextStep * STEP < t + 0.15 && nextStep < BARS * 8) {
                 const at = a.currentTime + (nextStep * STEP - t);
                 const pos = nextStep % 8;
-                const chord = FW_CHORDS[Math.floor(nextStep / 8 / 2) % 4];
-                if (pos === 0 || pos === 4) tone(140, at, 0.14, { type: 'sine', vol: 0.09, to: 40 });
-                if (pos === 2 || pos === 6) noise(at, 0.1, 0.05, 1500);
-                noise(at, 0.025, 0.015, 7000);
-                if ([0, 3, 4, 6].includes(pos)) tone(midiHz(chord[0] - 24), at, STEP * 0.9, { type: 'triangle', vol: 0.06 });
+                const bar = Math.floor(nextStep / 8);
+                const chord = FW_CHORDS[Math.floor(bar / 2) % 4];
+                const section = fwSection(bar);
+                const big = !!section?.[3];
+                // Drums: four-on-the-floor in the choruses, a backbeat otherwise, and a fill into each section.
+                const fill = section && bar === section[0] + section[1] - 1 && pos >= 4;
+                if (pos === 0 || pos === 4 || (big && (pos === 2 || pos === 6) && !fill) || (pos === 7 && bar % 2)) tone(150, at, 0.16, { type: 'sine', vol: 0.32, to: 42, out: o });
+                if (pos === 2 || pos === 6) noise(at, 0.14, 0.16, 1200, o);
+                if (fill) tone(220 - pos * 20, at, 0.12, { type: 'sine', vol: 0.18, to: 80, out: o });
+                noise(at, pos % 2 ? 0.03 : 0.05, big ? 0.05 : 0.035, 8000, o);
+                if (pos === 0 && bar % 4 === 0 && bar >= 2) noise(at, 1.2, 0.05, 5000, o);
+                if (bar < 2) {
+                    nextStep++;
+                    continue;
+                }
+                // Bass: root eighths, jumping to the fifth and octave in the big sections.
+                const bassNote = chord[0] - 24 + (big && pos === 3 ? 7 : big && pos === 6 ? 12 : 0);
+                tone(midiHz(bassNote), at, STEP * 0.85, { type: 'sawtooth', vol: 0.11, cutoff: 700, out: o });
+                // Pad: a soft, detuned chord held across the bar.
+                if (pos === 0) {
+                    for (const p of chord.slice(0, 3)) {
+                        for (const d of [-8, 8]) tone(midiHz(p), at, STEP * 8, { type: 'sawtooth', vol: 0.022, attack: 0.25, cutoff: 1400, detune: d, out: o });
+                    }
+                }
+                // Arpeggio: sparkle on top in the chorus and solo.
+                if (big) tone(midiHz(chord[[0, 1, 2, 3, 2, 1, 2, 3][pos]] + 12), at, STEP * 0.6, { type: 'square', vol: 0.018, cutoff: 3000, out: o });
                 nextStep++;
             }
         }
@@ -1471,14 +1590,21 @@ const FRETWORK = {
             score += (perfect ? 100 : 50) * mult();
             meter = Math.min(100, meter + 3);
             judge = { text: perfect ? 'PERFECT' : 'GOOD', color: perfect ? PAL.yellow : PAL.fg, t: 30 };
-            const chord = FW_CHORDS[Math.floor(note.bar / 2) % 4];
-            tone(midiHz(chord[lane] + 12), audioOut()?.currentTime ?? 0, 0.22, { type: 'square', vol: 0.035 });
+            // A hit plays that note of the melody: you are the lead guitar.
+            const a = audioOut();
+            if (a) {
+                const at = a.currentTime;
+                const dur = note.len * STEP * 0.95;
+                tone(midiHz(note.pitch), at, dur, { type: 'square', vol: 0.09, cutoff: 2600, out: out(a) });
+                tone(midiHz(note.pitch), at, dur, { type: 'sawtooth', vol: 0.05, cutoff: 1800, detune: 12, out: out(a) });
+            }
         }
 
         return {
             get score() { return score; },
             get over() { return over; },
             get endTitle() { return now() >= end ? 'ENCORE!' : 'BOOED OFF'; },
+            silence,
             update(inp) {
                 ticks++;
                 const t = now();
@@ -1492,6 +1618,8 @@ const FRETWORK = {
                     if (n.done || t - n.t < 0.13) continue;
                     n.done = true;
                     n.missed = true;
+                    // A miss is a dead-string scrape instead of the melody.
+                    if (audioCtx && bus) noise(audioCtx.currentTime, 0.06, 0.05, 2500, bus);
                     combo = 0;
                     meter -= 4;
                     judge = { text: 'MISS', color: PAL.red, t: 30 };
@@ -1605,6 +1733,7 @@ function arcadeApp(startId = null) {
     const api = { sfx: playSfx };
 
     function startGame(def) {
+        game?.silence?.();
         current = def;
         game = def.create(api);
         phase = 'ready';
@@ -1612,6 +1741,7 @@ function arcadeApp(startId = null) {
     }
 
     function toMenu() {
+        game?.silence?.();
         phase = 'menu';
         current = null;
         game = null;
@@ -1619,6 +1749,9 @@ function arcadeApp(startId = null) {
     }
 
     function finish() {
+        // Let the last chord ring briefly, then stop the band.
+        const done = game;
+        setTimeout(() => done.silence?.(), 1500);
         phase = 'over';
         overAt = frame;
         const scores = hiScores();
@@ -1674,6 +1807,7 @@ function arcadeApp(startId = null) {
         }
         if (k === 'pause') {
             phase = 'paused';
+            game.silence?.();
             return true;
         }
         return false;
@@ -1750,7 +1884,10 @@ function arcadeApp(startId = null) {
         last = ts;
         // Switching windows, workspaces or tabs pauses the game.
         const active = wm.focused === win && !document.hidden && saverEl.hidden;
-        if (!active && phase === 'play') phase = 'paused';
+        if (!active && phase === 'play') {
+            phase = 'paused';
+            game.silence?.();
+        }
         while (acc >= STEP) {
             acc -= STEP;
             tick();
@@ -1835,6 +1972,7 @@ function arcadeApp(startId = null) {
             el.focus({ preventScroll: true });
         },
         cleanup() {
+            game?.silence?.();
             cancelAnimationFrame(raf);
         },
     };
