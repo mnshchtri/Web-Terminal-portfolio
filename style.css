@@ -1534,28 +1534,34 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
 .cc-pre { margin: 4px 0 4px 2ch; padding-left: 1ch; border-left: 2px solid var(--line); color: var(--fg); }
 .cc-out { opacity: 0.9; }
 .cc-out .ls-grid { margin: 2px 0 0 5ch; }
-/* The input box and its hint line stay pinned to the bottom of the window while the chat scrolls. */
+/* The input band and its status line stay pinned to the bottom of the window while the chat scrolls. */
 .input-line.cc-input {
     position: sticky;
-    bottom: calc(1.45em + 14px);
-    z-index: 1;
-    margin-top: 6px;
-    padding: 3px 8px;
-    border: 1px solid #888;
-    border-radius: 6px;
+    bottom: calc(1.45em + 18px);
+    z-index: 2;
+    margin: 8px -14px 0;
+    padding: 4px 14px;
+    border-top: 1px solid #5a5a5a;
+    border-bottom: 1px solid #5a5a5a;
     background: var(--bg);
-    /* A solid band around the box, so scrolled text never shows behind it. */
-    box-shadow: 0 0 0 4px var(--bg), 0 -6px 0 6px var(--bg), 0 10px 0 6px var(--bg);
+    box-shadow: 0 -8px 0 0 var(--bg);
 }
+.input-line.cc-input .prompt { color: var(--dim); }
 .input-line.cc-input .user-input::placeholder { color: var(--dim); }
 .cc-foot {
     position: sticky;
     bottom: -14px;
     z-index: 1;
-    padding: 2px 0 14px;
-    margin-bottom: -14px;
+    margin: 0 -14px -14px;
+    padding: 6px 14px 14px;
     background: var(--bg);
-    box-shadow: 0 0 0 6px var(--bg);
+    /* Fills the gap up to the input band, which sits above it. */
+    box-shadow: 0 -24px 0 0 var(--bg);
     color: var(--dim);
     white-space: pre;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+.cc-mode-auto { color: #e5c07b; }
+.cc-mode-plan { color: #48b0a0; }
+.cc-mode-edits { color: #b18cf5; }

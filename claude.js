@@ -499,11 +499,36 @@ function ccWelcome() {
 }
 
 // Claude Code's input: a bordered box with a placeholder, and a hint line under it.
+// Claude Code's input: a full-width band between two rules, ❯ prompt, and a status line under it.
+// Shift+Tab cycles the permission mode shown there, as in the real thing.
+const CC_MODES = [
+    ['auto', '⏵⏵ auto mode on'],
+    ['plan', '⏸ plan mode on'],
+    ['edits', '⏵⏵ accept edits on'],
+    ['default', ''],
+];
+let ccMode = 0;
+
+function ccFootHtml() {
+    const [id, label] = CC_MODES[ccMode];
+    const rest = c('dim', `${label ? ' (shift+tab to cycle)' : '? for shortcuts'} · esc to interrupt · ← for agents`);
+    return `  ${label ? `<span class="cc-mode-${id}">${label}</span>` : ''}${rest}`;
+}
+
 function ccInputMode(on) {
     inputLine.classList.toggle('cc-input', on);
     input.placeholder = on ? pick(['Try "who is Neox?"', 'Try "how do I get root?"', 'Try "give me a tour"']) : '';
     if (inputLine.nextElementSibling?.classList.contains('cc-foot')) inputLine.nextElementSibling.remove();
-    if (on) inputLine.insertAdjacentHTML('afterend', '<div class="cc-foot">  ? for shortcuts</div>');
+    if (on) inputLine.insertAdjacentHTML('afterend', `<div class="cc-foot">${ccFootHtml()}</div>`);
+}
+
+function ccCycleMode(e) {
+    if (e.key !== 'Tab' || !e.shiftKey || !inputLine.classList.contains('cc-input')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ccMode = (ccMode + 1) % CC_MODES.length;
+    const foot = inputLine.nextElementSibling;
+    if (foot?.classList.contains('cc-foot')) foot.innerHTML = ccFootHtml();
 }
 
 function ccSlash(cmd) {
@@ -593,9 +618,10 @@ async function cmdClaude({ args }) {
     scrollback.append(...screen.childNodes);
     ccWelcome();
     ccInputMode(true);
+    window.addEventListener('keydown', ccCycleMode, true);
     try {
         for (;;) {
-            const raw = (await ask('> ')).trim();
+            const raw = (await ask('❯ ')).trim();
             if (state.abort) {
                 state.abort = false;
                 state.skip = false;
@@ -613,6 +639,7 @@ async function cmdClaude({ args }) {
             ccInputMode(true);
         }
     } finally {
+        window.removeEventListener('keydown', ccCycleMode, true);
         ccInputMode(false);
         ccLeaving = false;
         screen.replaceChildren(scrollback);
