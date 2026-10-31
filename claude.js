@@ -517,6 +517,8 @@ function ccFootHtml() {
 
 function ccInputMode(on) {
     inputLine.classList.toggle('cc-input', on);
+    // During a session the input band sits on the window's bottom edge, however short the chat is.
+    terminal.classList.toggle('cc-session', on || state.busy);
     input.placeholder = on ? pick(['Try "who is Neox?"', 'Try "how do I get root?"', 'Try "give me a tour"']) : '';
     if (inputLine.nextElementSibling?.classList.contains('cc-foot')) inputLine.nextElementSibling.remove();
     if (on) inputLine.insertAdjacentHTML('afterend', `<div class="cc-foot">${ccFootHtml()}</div>`);
@@ -641,6 +643,7 @@ async function cmdClaude({ args }) {
     } finally {
         window.removeEventListener('keydown', ccCycleMode, true);
         ccInputMode(false);
+        terminal.classList.remove('cc-session');
         ccLeaving = false;
         screen.replaceChildren(scrollback);
         screen.parentElement.scrollTop = screen.parentElement.scrollHeight;
