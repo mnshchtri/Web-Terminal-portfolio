@@ -189,6 +189,8 @@ function updatePrompt() {
 }
 
 function setTitle(running) {
+    // Kept per session, so switching back to a window mid-command restores its title.
+    state.running = running;
     document.title = running ? `${running} — ${state.user}@${HOST}` : `${state.user}@${HOST}:${tildify(state.cwd)}`;
 }
 

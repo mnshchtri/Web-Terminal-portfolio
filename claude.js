@@ -970,7 +970,7 @@ function ccInputMode(on) {
 }
 
 function ccCycleMode(e) {
-    if (e.key !== 'Tab' || !e.shiftKey || !inputLine.classList.contains('cc-input')) return;
+    if (e.key !== 'Tab' || !e.shiftKey || !inputLine?.classList.contains('cc-input')) return;
     e.preventDefault();
     e.stopPropagation();
     ccMode = (ccMode + 1) % CC_MODES.length;

@@ -21,7 +21,10 @@ const IDLE_MS = 150000; // screensaver timeout from neox's shell.json
 const wm = { windows: [], active: 1, focused: null, nextId: 1, lastFocused: {}, deferred: [] };
 
 const isMobile = () => matchMedia('(max-width: 700px)').matches;
-const focusedBusy = () => !!wm.focused?.shell?.session.busy;
+// A command waiting at a prompt (claude, sudo, read) can't resume until its window has focus again,
+// so it doesn't hold the desktop; one that is actually running does.
+const shellBusy = (win) => !!win?.shell?.session.busy && !win.shell.session.pending;
+const focusedBusy = () => shellBusy(wm.focused);
 
 // ---------- window manager ----------
 
@@ -110,8 +113,8 @@ function focusWindow(win) {
         if (!state.busy) {
             updatePrompt();
             setBusy(false);
-        }
-        setTitle();
+        } else if (state.pending) input.focus();
+        setTitle(state.running);
     }
     layout();
     return true;
@@ -297,7 +300,12 @@ function enterTty() {
 // ---------- notifications ----------
 
 function notify(title, body = '', ms = 6000) {
+    // The same message again replaces the one on screen instead of stacking.
+    for (const old of notifyEl.querySelectorAll('.toast')) {
+        if (old.dataset.key === title + body) old.remove();
+    }
     const toast = document.createElement('div');
+    toast.dataset.key = title + body;
     toast.className = 'toast';
     toast.innerHTML = `<div class="toast-title">${esc(title)}</div>${body ? `<div class="toast-body">${esc(body)}</div>` : ''}`;
     const dismiss = () => {
