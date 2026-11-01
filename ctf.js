@@ -1,6 +1,6 @@
 'use strict';
 
-// NeoxCTF: six flags hidden around the box, each a small real-world attack path, plus hidden quests.
+// NeoxCTF: seven flags hidden around the box, each a small real-world attack path, plus hidden quests.
 // Flags are checked against SHA-256 hashes and the ones challenges print are XOR-veiled (`unveil`
 // in fs.js), so reading the source is no shortcut. Hidden quests without a flag award themselves.
 // Progress is kept in localStorage, so it survives `reboot`.
@@ -46,6 +46,17 @@ const CTF = [
             `RBAC is per namespace. ${c('exe', 'kubectl get ns')}, then ${c('exe', 'kubectl auth can-i --list -n NAMESPACE')} for each.`,
             `${c('exe', 'kubectl get secret NAME -n NAMESPACE -o yaml')}`,
             `Secret data is base64-encoded, not encrypted: ${c('exe', "echo '…' | base64 -d")}`,
+        ],
+    },
+    {
+        id: 'kafka', cat: 'streaming', name: 'Dead Letters', pts: 150,
+        hash: '50df8fae43f56c327cd30f3178b688e9e0cb1d5a07b360c30c1831f395927d67',
+        brief: 'Payments flow through a Kafka broker on this box. The platform team locked the payments topic down with ACLs. Messages that fail still have to go somewhere, though.',
+        hints: [
+            `Find the broker (${c('exe', 'nmap localhost')}), then see what it carries: ${c('exe', 'kafka-topics.sh --bootstrap-server localhost:9092 --list')}`,
+            `Compare what's locked down with what exists: ${c('exe', 'kafka-acls.sh --bootstrap-server localhost:9092 --list')}. A message that fails processing lands in a <em>dead-letter queue</em>.`,
+            `A new consumer only sees new messages. ${c('exe', 'kafka-console-consumer.sh')} needs ${c('exe', '--from-beginning')} to read what's already there.`,
+            `The value is only half a Kafka record. Records carry headers too: ${c('exe', '--property print.headers=true')}`,
         ],
     },
     {
@@ -205,8 +216,10 @@ function cmdCtf({ args }) {
 // ---------- shared plumbing: users, units, processes, tools ----------
 
 UNITS.knockd = { desc: 'Port-knock server', pid: 488, bin: '/usr/bin/knockd -c /etc/knockd.conf', active: true };
+UNITS.kafka = { desc: 'Apache Kafka broker (KRaft)', pid: 610, bin: '/usr/lib/jvm/java-21-openjdk/bin/java -Xmx1G kafka.Kafka /etc/kafka/server.properties', active: true };
 SYS.procs.push(
     { pid: 488, user: 'root', base: 0, cpu: 0, mem: 0.1, cmd: '/usr/bin/knockd -c /etc/knockd.conf', time: 3 },
+    { pid: 610, user: 'kafka', base: 1.2, cpu: 1.2, mem: 6.4, cmd: '/usr/lib/jvm/java-21-openjdk/bin/java -Xmx1G kafka.Kafka /etc/kafka/server.properties', time: 812 },
     // The implant renamed itself to look like a kernel thread, but kernel threads show in [brackets].
     { pid: 2323, user: 'root', base: 0.1, cpu: 0.1, mem: 0.1, cmd: 'kworker/u8:2', time: 41 },
 );
@@ -479,7 +492,7 @@ COMMANDS.curl.run = async (ctx) => {
 
 const KNOCK_SEQ = [7331, 4919, 8008];
 const knockd = { stage: 0, first: 0, openUntil: 0 };
-const OPEN_PORTS = [22, 80, 443, 1337, 5432, 8443, 9100];
+const OPEN_PORTS = [22, 80, 443, 1337, 5432, 8443, 9092, 9100];
 const portOpen = (port) => OPEN_PORTS.includes(port) || (port === 31337 && Date.now() < knockd.openUntil);
 
 FS.children.etc.children['knockd.conf'] = file(`
@@ -575,6 +588,7 @@ async function cmdNc({ args, stdin }) {
         ];
     }
     const http = stdin?.match(/^(GET|HEAD) (\S+)/);
+    if (port === 9092) return [c('dim', "(connected. Kafka speaks its own binary protocol, not text: use kafka-topics.sh, kafka-console-consumer.sh or kcat)")];
     if (!http) return port === 5432 ? [] : [c('dim', `(connected. This one speaks HTTP: printf 'GET / HTTP/1.0\\n\\n' | nc ${esc(host)} ${port})`)];
     const res = localHttp(port, http[2]);
     return [...httpResponse(res, true), ...(http[1] === 'GET' ? textLines(res.body) : [])].map(esc);
@@ -707,6 +721,166 @@ COMMANDS.kubectl.run = (ctx) => {
     return realKubectl(ctx);
 };
 
+// ---------- Dead Letters: ACLs on the payments topic, none on its dead-letter queue ----------
+
+FS.children.etc.children.kafka = dir({
+    'server.properties': file(`
+# Apache Kafka 4.1, single node, KRaft mode
+process.roles=broker,controller
+node.id=1
+listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+log.dirs=/var/lib/kafka/data
+num.partitions=1
+
+authorizer.class.name=org.apache.kafka.metadata.authorizer.StandardAuthorizer
+super.users=User:admin
+# TODO(platform): payments-svc fails if the DLQ is locked down; revisit after the migration
+allow.everyone.if.no.acl.found=true
+`),
+});
+
+const KAFKA_FLAG = 'CAkOHxUBXEwKOgNLGhFcCh06HBNfFTAMBlYwTA0JHAU=';
+const KAFKA_BROKER = 'localhost:9092';
+const kafkaRec = (key, value, headers = {}) => ({ key, value, headers });
+const KAFKA_TOPICS = {
+    'payments.transactions': { partitions: 6, acl: true, records: [] },
+    'payments.transactions.dlq': {
+        partitions: 1,
+        records: [
+            kafkaRec('txn-88213', '{"txn":"txn-88213","amount":1250.00,"currency":"NPR","status":"FAILED","error":"SchemaValidationException: field \'merchant_id\' is null"}', { 'x-error-class': 'SchemaValidationException', 'x-retries': '3' }),
+            kafkaRec('txn-88240', '{"txn":"txn-88240","amount":49.99,"currency":"USD","status":"FAILED","error":"TimeoutException: ledger-service did not respond in 30000ms"}', { 'x-error-class': 'TimeoutException', 'x-retries': '5' }),
+            // The failed record kept the original request's headers, internal auth token included.
+            kafkaRec('txn-88257', '{"txn":"txn-88257","amount":300000.00,"currency":"NPR","status":"FAILED","error":"FraudCheckException: amount over single-transfer limit"}',
+                { 'x-error-class': 'FraudCheckException', 'x-retries': '0', 'x-origin-service': 'ledger-gateway', authorization: () => `Bearer ${unveil(KAFKA_FLAG)}` }),
+        ],
+    },
+    'infra-eye.metrics': { partitions: 3, records: [kafkaRec('k8s-wk-01', '{"cpu":41.2,"mem":63.0,"disk":58.1}'), kafkaRec('k8s-wk-02', '{"cpu":12.9,"mem":44.7,"disk":61.3}')] },
+    'audit.logins': { partitions: 1, acl: true, records: [] },
+    _schemas: { partitions: 1, records: [kafkaRec('{"subject":"payments-value","version":3}', '{"type":"record","name":"Transaction","fields":["txn","amount","currency","merchant_id"]}')] },
+    __consumer_offsets: { partitions: 50, internal: true, records: [] },
+};
+const kafkaAdmin = () => isRoot() || state.user === 'neox';
+const kafkaDenied = (topic) => KAFKA_TOPICS[topic]?.acl && !kafkaAdmin();
+
+function parseKafka(args) {
+    const opt = { props: {} };
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        let m;
+        if ((m = a.match(/^--([\w-]+)=(.*)$/))) opt[m[1]] = m[2];
+        else if (a === '--property') {
+            const [k, ...v] = (args[++i] || '').split('=');
+            opt.props[k] = v.join('=');
+        } else if (/^--(list|describe|from-beginning|create|delete)$/.test(a)) opt[a.slice(2)] = true;
+        else if (a.startsWith('--')) opt[a.slice(2)] = args[++i];
+    }
+    return opt;
+}
+
+function kafkaNoBroker(server) {
+    if (!server) return err('Missing required argument "[bootstrap-server]"');
+    if (!/^(localhost|127\.0\.0\.1|neox):9092$/.test(server)) {
+        return err(`WARN [AdminClient clientId=adminclient-1] Connection to node -1 (${server}) could not be established. Node may not be available.`);
+    }
+    return null;
+}
+
+function cmdKafkaTopics({ args }) {
+    const o = parseKafka(args);
+    const down = kafkaNoBroker(o['bootstrap-server']);
+    if (down) return down;
+    if (o.create || o.delete) return err(`Error while executing topic command : Authorization failed. (org.apache.kafka.common.errors.TopicAuthorizationException)`);
+    if (o.describe) {
+        const names = o.topic ? [o.topic] : Object.keys(KAFKA_TOPICS).filter((t) => !KAFKA_TOPICS[t].internal);
+        if (o.topic && !KAFKA_TOPICS[o.topic]) return err(`Error while executing topic command : Topic '${o.topic}' does not exist as expected`);
+        return names.flatMap((t) => [`Topic: ${t}\tPartitionCount: ${KAFKA_TOPICS[t].partitions}\tReplicationFactor: 1\tConfigs: ${t.endsWith('.dlq') ? 'retention.ms=-1' : 'cleanup.policy=delete'}`,
+            ...Array.from({ length: Math.min(KAFKA_TOPICS[t].partitions, 3) }, (_, p) => `\tTopic: ${t}\tPartition: ${p}\tLeader: 1\tReplicas: 1\tIsr: 1`)]).map(esc);
+    }
+    if (o.list) return Object.keys(KAFKA_TOPICS).sort().map(esc);
+    return err('kafka-topics.sh: use --list or --describe [--topic T] with --bootstrap-server localhost:9092');
+}
+
+function cmdKafkaAcls({ args }) {
+    const o = parseKafka(args);
+    const down = kafkaNoBroker(o['bootstrap-server']);
+    if (down) return down;
+    if (!o.list) return err('kafka-acls.sh: Authorization failed. Only --list is allowed for this principal.');
+    const acl = (topic, ...rules) => [`Current ACLs for resource \`ResourcePattern(resourceType=TOPIC, name=${topic}, patternType=LITERAL)\`: `,
+        ...rules.map(([who, op]) => `\t(principal=${who}, host=*, operation=${op}, permissionType=ALLOW)`), ''];
+    return [...acl('payments.transactions', ['User:payments-svc', 'ALL'], ['User:ledger-svc', 'READ']), ...acl('audit.logins', ['User:wazuh', 'READ']),
+        c('dim', '# allow.everyone.if.no.acl.found=true on this broker')].map((l) => (l.startsWith('<') ? l : esc(l)));
+}
+
+// Formats a record like the console consumer: headers, then key, then value, tab-separated.
+function kafkaLine(rec, { headers, keys }) {
+    const hs = Object.entries(rec.headers).map(([k, v]) => `${k}:${typeof v === 'function' ? v() : v}`).join(',');
+    return [headers ? hs || 'NO_HEADERS' : null, keys ? rec.key : null, rec.value].filter((x) => x != null).join('\t');
+}
+
+async function cmdKafkaConsume({ args }) {
+    const o = parseKafka(args);
+    const down = kafkaNoBroker(o['bootstrap-server']);
+    if (down) return down;
+    const topic = o.topic;
+    if (!topic) return err('Exactly one of --include/--topic is required.');
+    const t = KAFKA_TOPICS[topic];
+    if (!t) return err(`WARN [Consumer clientId=console-consumer] Error while fetching metadata: {${topic}=UNKNOWN_TOPIC_OR_PARTITION}`);
+    if (kafkaDenied(topic)) {
+        return err(`ERROR Error processing message, terminating consumer process: org.apache.kafka.common.errors.TopicAuthorizationException: Not authorized to access topics: [${topic}]`);
+    }
+    await sleep(900);
+    // Without --from-beginning a new consumer group starts at the end of the log, so it sees nothing.
+    const records = o['from-beginning'] ? t.records : [];
+    const max = o['max-messages'] ? Number(o['max-messages']) : Infinity;
+    const shown = records.slice(0, max);
+    const opts = { headers: o.props['print.headers'] === 'true', keys: o.props['print.key'] === 'true' };
+    return [...shown.map((r) => esc(kafkaLine(r, opts))), ...(o['from-beginning'] ? [] : [c('dim', '^C (no new messages arrived)')]), `Processed a total of ${shown.length} messages`];
+}
+
+// kcat (kafkacat): -L lists metadata, -C -t TOPIC consumes; -f '%h %k %s\n' formats headers/key/value.
+async function cmdKcat({ args }) {
+    let broker = '';
+    let topic = '';
+    let fmt = null;
+    let mode = '';
+    let offset = 'beginning';
+    for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        if (a === '-b') broker = args[++i];
+        else if (a === '-t') topic = args[++i];
+        else if (a === '-f') fmt = args[++i];
+        else if (a === '-o') offset = args[++i];
+        else if (a === '-L' || a === '-C' || a === '-P') mode = a;
+    }
+    if (!broker) return err('% ERROR: No brokers configured (-b)');
+    if (!/^(localhost|127\.0\.0\.1|neox):9092$/.test(broker)) return err(`% ERROR: Local: Broker transport failure: ${broker}`);
+    if (mode === '-L' || !mode && !topic) {
+        return [`Metadata for all topics (from broker 1: ${broker}/1):`, ' 1 brokers:', `  broker 1 at ${broker} (controller)`, ` ${Object.keys(KAFKA_TOPICS).length} topics:`,
+            ...Object.entries(KAFKA_TOPICS).map(([n, t]) => `  topic "${n}" with ${t.partitions} partitions`)].map(esc);
+    }
+    if (mode === '-P') return err('% ERROR: Topic authorization failed');
+    const t = KAFKA_TOPICS[topic];
+    if (!t) return err(`% ERROR: Topic ${topic} error: Broker: Unknown topic or partition`);
+    if (kafkaDenied(topic)) return err(`% ERROR: Topic ${topic} error: Broker: Topic authorization failed`);
+    await sleep(700);
+    const records = offset === 'end' ? [] : t.records;
+    const line = (r) => (fmt
+        ? fmt.replace(/\\n/g, '').replace(/%h/g, Object.entries(r.headers).map(([k, v]) => `${k}=${typeof v === 'function' ? v() : v}`).join(',')).replace(/%k/g, r.key).replace(/%s/g, r.value).replace(/%t/g, topic).replace(/%p/g, '0')
+        : r.value);
+    return [...records.map((r) => esc(line(r))), c('dim', `% Reached end of topic ${topic} [0] at offset ${records.length}`)];
+}
+
+Object.assign(COMMANDS, {
+    'kafka-topics.sh': { group: 'DevOps', usage: 'kafka-topics.sh --bootstrap-server localhost:9092 --list|--describe [--topic T]', desc: 'list and describe Kafka topics', run: cmdKafkaTopics },
+    'kafka-console-consumer.sh': { group: 'DevOps', usage: 'kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic T [--from-beginning] [--property print.headers=true]', desc: 'read records from a Kafka topic', run: cmdKafkaConsume },
+    'kafka-acls.sh': { group: 'DevOps', usage: 'kafka-acls.sh --bootstrap-server localhost:9092 --list', desc: 'list Kafka ACLs', run: cmdKafkaAcls },
+    kcat: { group: 'DevOps', usage: "kcat -b localhost:9092 -L | -C -t TOPIC [-f '%h %k %s\\n']", desc: 'kafkacat: Kafka metadata and consumer', run: cmdKcat },
+    'kafka-topics': { group: 'Hidden', usage: 'kafka-topics', desc: 'kafka-topics.sh', run: cmdKafkaTopics },
+    'kafka-console-consumer': { group: 'Hidden', usage: 'kafka-console-consumer', desc: 'kafka-console-consumer.sh', run: cmdKafkaConsume },
+    'kafka-acls': { group: 'Hidden', usage: 'kafka-acls', desc: 'kafka-acls.sh', run: cmdKafkaAcls },
+    kafkacat: { group: 'Hidden', usage: 'kafkacat', desc: 'kcat', run: cmdKcat },
+});
+
 // ---------- Persistence: an intruder's cron job and implant ----------
 
 const DFIR_FLAG = 'CAkOHxUGHUgAOh9LHBZeCxpWARtdOh1IGlRcJ18WAQwxBh0BHhFfBQ==';
@@ -775,7 +949,7 @@ meltdown = (...args) => {
 
 // ---------- ctf.neox: the scoreboard as a website in Chromium ----------
 
-const CTF_CAT_COLOR = { recon: 'cyan', web: 'yellow', network: 'green', cloud: 'blue', forensics: 'magenta', privesc: 'red', misc: 'dim', crypto: 'yellow' };
+const CTF_CAT_COLOR = { recon: 'cyan', web: 'yellow', network: 'green', cloud: 'blue', streaming: 'cyan', forensics: 'magenta', privesc: 'red', misc: 'dim', crypto: 'yellow' };
 
 function ctfSite() {
     const solved = ctfSolved();
@@ -798,7 +972,7 @@ function ctfSite() {
     const complete = score === CTF_TOTAL;
     const html = `<div class="ctfw">
         <header class="ctfw-head">
-            <div><h1>⚑ NeoxCTF</h1><p>Six flags hidden on this box, each a real attack path in miniature. Plus quests nobody will tell you about.</p></div>
+            <div><h1>⚑ NeoxCTF</h1><p>Seven flags hidden on this box, each a real attack path in miniature. Plus quests nobody will tell you about.</p></div>
             <div class="ctfw-score"><b>${score}</b> / ${CTF_TOTAL} pts<span>rank: ${esc(ctfRank(score))}</span>
                 <div class="ctfw-bar"><i style="width:${(score / CTF_TOTAL) * 100}%"></i></div></div>
         </header>

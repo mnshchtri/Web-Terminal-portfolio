@@ -52,7 +52,7 @@ A failed command plays the same "fahhh" my own zsh does (`assets/sounds`); the v
 No build step — open `index.html` or push to deploy.
 
 ## NeoxCTF
-The box is a small capture-the-flag. Six challenges, each a real attack path in miniature (recon, web, network, cloud, forensics and privilege escalation), plus four hidden quests that never appear on the scoreboard until someone finds them. Visitors start as `visitor` with no sudo rights. `ctf` shows the scoreboard, `ctf info N` the brief, `ctf hint N` one nudge at a time, and `ctf submit flag{…}` scores. Progress is saved in the browser and survives `reboot`.
+The box is a small capture-the-flag. Seven challenges, each a real attack path in miniature (recon, web, network, cloud, Kafka streaming, forensics and privilege escalation), plus four hidden quests that never appear on the scoreboard until someone finds them. Visitors start as `visitor` with no sudo rights. `ctf` shows the scoreboard, `ctf info N` the brief, `ctf hint N` one nudge at a time, and `ctf submit flag{…}` scores. Progress is saved in the browser and survives `reboot`.
 
 Reading this source isn't a shortcut. Flags are checked against SHA-256 hashes, the ones the challenges print are XOR-veiled (`unveil` in `fs.js`), and only the root password's hash is stored.
 

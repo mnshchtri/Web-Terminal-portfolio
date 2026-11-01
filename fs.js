@@ -33,7 +33,7 @@ Welcome to NeoxOS — the personal system of Manish Karki (Neox).
   * Start here:   cat README.md
   * Commands:     help
   * Overview:     neofetch
-  * Challenge:    NeoxCTF — 6 flags hidden on this box, plus secret quests.  (start: ctf)
+  * Challenge:    NeoxCTF — 7 flags hidden on this box, plus secret quests.  (start: ctf)
   * Lost?         claude  (Claude Code: ask it anything about this box)
 `),
         passwd: file(`
@@ -107,8 +107,8 @@ It's a desktop too (Alt stands in for Super):
   Alt+Space launcher · Alt+F fullscreen · Alt+Shift+Space backgrounds · Alt+Ctrl+Space next one
   wallpaper list · chromium wiki.archlinux.org · nautilus ~/projects
 
-It's also a CTF: six flags are hidden on this box (web, network, cloud,
-forensics, privesc...) plus secret quests nobody will tell you about.
+It's also a CTF: seven flags are hidden on this box (web, network, cloud,
+kafka, forensics, privesc...) plus secret quests nobody will tell you about.
   ctf                        the scoreboard
   ctf info 1                 where to start
   claude                     Claude Code: ask it anything, get CTF hints

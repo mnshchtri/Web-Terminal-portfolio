@@ -457,6 +457,7 @@ async function cmdNmap({ args }) {
         ['1337/tcp', 'waste?', 'nsh 1.1 (neox terminal portfolio)'],
         ['5432/tcp', 'postgresql', 'PostgreSQL DB 17.6'],
         ['8443/tcp', 'https-alt', 'DeployForge API'],
+        ['9092/tcp', 'kafka', 'Apache Kafka 4.1 (KRaft)'],
         ['9100/tcp', 'jetdirect?', 'InfraEye collector'],
     ];
     return [

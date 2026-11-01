@@ -30,7 +30,7 @@ DevSecOps engineer who came up through offensive security. This vault is the pub
 - [[Music]] · [[Audio DSP]] · [[Now]]
 
 > [!tip] Try it live
-> This whole site is a Linux box. It's also a CTF: six flags and some hidden quests (run \`ctf\`). For the root one, see [[Privilege escalation]] for the mindset.
+> This whole site is a Linux box. It's also a CTF: seven flags and some hidden quests (run \`ctf\`). For the root one, see [[Privilege escalation]] for the mindset.
 
 #index`,
 

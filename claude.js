@@ -172,12 +172,13 @@ const CC_CTF_WORDS = {
     web: /\bweb\b|robots|staging|nginx|localhost|disallow|second (flag|challenge|one)|challenge 2\b/,
     knock: /knock|\bports?\b|1337|31337|\bnc\b|netcat|network|third (flag|challenge|one)|challenge 3\b/,
     k8s: /k8s|kube|kubernetes|kubectl|rbac|secret service|cluster|cloud|fourth (flag|challenge|one)|challenge 4\b/,
-    dfir: /forensic|intrud|cron|persist|implant|auth\.log|\blogs?\b|wazuh|incident|dfir|malware|fifth (flag|challenge|one)|challenge 5\b/,
-    root: /\broot\b|privesc|privilege|\bsudo\b|escalat|password|\bsu\b|sixth (flag|challenge|one)|last (flag|challenge|one)|challenge 6\b/,
+    kafka: /kafka|kcat|topics?\b|consumer|dead.?letter|\bdlq\b|broker|9092|streaming|dead letters|fifth (flag|challenge|one)|challenge 5\b/,
+    dfir: /forensic|intrud|cron|persist|implant|auth\.log|\blogs?\b|wazuh|incident|dfir|malware|sixth (flag|challenge|one)|challenge 6\b/,
+    root: /\broot\b|privesc|privilege|\bsudo\b|escalat|password|\bsu\b|seventh (flag|challenge|one)|last (flag|challenge|one)|challenge 7\b/,
 };
 
 function ccWhichCtf(q) {
-    const n = q.match(/\b(?:challenge|flag|number|no\.?|#)\s*([1-6])\b/);
+    const n = q.match(/\b(?:challenge|flag|number|no\.?|#)\s*([1-7])\b/);
     if (n) return ccMainCtf()[Number(n[1]) - 1];
     const id = Object.keys(CC_CTF_WORDS).find((k) => CC_CTF_WORDS[k].test(q));
     return id ? CTF.find((ch) => ch.id === id) : null;
@@ -189,6 +190,7 @@ const CC_FIRST_LOOK = {
     web: 'nmap localhost',
     knock: 'nc localhost 1337',
     k8s: 'kubectl get secrets',
+    kafka: 'kafka-topics.sh --bootstrap-server localhost:9092 --list',
     dfir: "grep -c 'Failed password' /var/log/auth.log",
     root: 'id',
 };
@@ -198,6 +200,7 @@ const CC_OPENERS = {
     web: "Nice, a web one. Let's see what's listening first.",
     knock: 'This one is about talking to services. Let me poke the port it mentions.',
     k8s: "Kubernetes RBAC, my favourite kind of misconfiguration. Let's see what you're allowed to do.",
+    kafka: "Kafka! Event streams are full of things nobody meant to keep. Let's see what the broker carries.",
     dfir: "Incident response time. Something happened on this box last night; let's check how bad.",
     root: "The big one. First, let's see who you are on this box.",
 };
@@ -206,7 +209,7 @@ async function ccCtfHint(ch) {
     cc.last = { topic: 'hint', ch };
     if (ctfSolved()[ch.id]) {
         const next = ccNextCtf();
-        await ccSay(`You've already captured **${ch.name}**, nicely done. ${next ? `Next up is **${next.name}** (${next.cat}). Want a nudge on that one?` : 'All six main flags are yours. Only the hidden quests are left.'}`);
+        await ccSay(`You've already captured **${ch.name}**, nicely done. ${next ? `Next up is **${next.name}** (${next.cat}). Want a nudge on that one?` : 'Every main flag is yours. Only the hidden quests are left.'}`);
         if (next) cc.offer = () => ccCtfHint(next);
         return;
     }
@@ -231,12 +234,12 @@ async function ccCtfOverview() {
     const score = ctfScore(solved);
     const done = ccMainCtf().filter((ch) => solved[ch.id]).length;
     const next = ccNextCtf();
-    await ccSay(`This box doubles as a capture-the-flag. There are six challenges, each a small real-world attack path (recon → web → network → cloud → forensics → privilege escalation), plus four hidden quests.\n\nYou're at **${done}/6** flags, **${score}/${CTF_TOTAL}** pts, rank *${ctfRank(score)}*.`);
+    await ccSay(`This box doubles as a capture-the-flag. There are ${ccMainCtf().length} challenges, each a small real-world attack path (recon → web → network → cloud → Kafka → forensics → privilege escalation), plus four hidden quests.\n\nYou're at **${done}/${ccMainCtf().length}** flags, **${score}/${CTF_TOTAL}** pts, rank *${ctfRank(score)}*.`);
     if (next) {
         await ccSay(`Next up is **${next.name}**: ${ccPlain(next.brief)}\n\nWant a hint to get going?`);
         cc.offer = () => ccCtfHint(next);
     } else {
-        await ccSay(score < CTF_TOTAL ? 'All six main flags are yours. Only the hidden quests remain.' : 'You cleared everything, hidden quests included. Run `ctf` for your certificate.');
+        await ccSay(score < CTF_TOTAL ? 'Every main flag is yours. Only the hidden quests remain.' : 'You cleared everything, hidden quests included. Run `ctf` for your certificate.');
     }
 }
 
@@ -523,6 +526,8 @@ const CC_TERMS = [
     [/\bssh\b/, '**SSH** gives you an encrypted shell on a remote machine, ideally with key-based auth rather than passwords.'],
     [/privilege escalation|privesc/, '**Privilege escalation** is going from limited access to more (usually root) by abusing misconfigurations, leaked credentials or vulnerable software. Challenge 6 here.'],
     [/reverse shell/, 'A **reverse shell** is when a compromised machine connects *out* to the attacker and hands over a shell, which slips past firewalls that block inbound connections.'],
+    [/kafka/, '**Apache Kafka** is a distributed event log: producers write records to topics, consumers read them at their own pace, and records stay around until retention removes them. Each record has a key, a value and headers. There\'s a broker on this box at `localhost:9092`.'],
+    [/dead.?letter|\bdlq\b/, 'A **dead-letter queue** (DLQ) is where messages go when processing fails, so they can be inspected and retried. They often keep the original record whole, headers included, and get forgotten when access rules are written.'],
     [/\bowasp\b/, '**OWASP** is a nonprofit known for the OWASP Top 10, the standard list of the most critical web application security risks.'],
     [/mitre|att&?ck/, '**MITRE ATT&CK** is a knowledge base of real-world adversary tactics and techniques, used to map detections and plan defences.'],
     [/\bsiem\b/, 'A **SIEM** collects logs from across your systems and correlates them into alerts. Neox uses Wazuh, and this box\'s journal has some of its alerts.'],
@@ -603,7 +608,7 @@ const CC_MORE_INTENTS = [
             await ccSay(`Welcome! You're in a good place to learn: the CTF here starts gentle and every step is a real technique.${next ? ` Want me to walk you into **${next.name}**?` : ''}`);
             if (next) cc.offer = () => ccCtfHint(next);
         } else if (/pentest|penetration|hacker|ctf|researcher|security/.test(cc.role)) {
-            await ccSay("Then you'll want the CTF: six flags along a real attack path, four hidden quests, and I only ever nudge. Want the scoreboard?");
+            await ccSay("Then you'll want the CTF: seven flags along a real attack path, four hidden quests, and I only ever nudge. Want the scoreboard?");
             cc.offer = () => ccCtfOverview();
         } else {
             await ccSay("Nice. You might enjoy the site's own source (VS Code, Alt+Shift+N) or the InfraEye demo (Alt+I). Want the quick tour first?");
@@ -729,7 +734,7 @@ function ccNextSteps() {
     const solved = ccMainCtf().length - ccMainCtf().filter((ch) => !ctfSolved()[ch.id]).length;
     const steps = [];
     if (next && solved) steps.push([`**Keep hacking.** You're on **${next.name}**; I can give you a nudge without spoiling it.`, () => ccCtfHint(next), /hack|ctf|hint|flag|nudge|challenge/]);
-    else if (next) steps.push(['**Break into this box.** Six flags are hidden in it, from warm-up to root. I\'ll guide, not spoil.', () => ccCtfOverview(), /hack|ctf|flag|challenge|break/]);
+    else if (next) steps.push(['**Break into this box.** Seven flags are hidden in it, from warm-up to root. I\'ll guide, not spoil.', () => ccCtfOverview(), /hack|ctf|flag|challenge|break/]);
     else steps.push(['**Hunt the hidden quests.** You\'ve cleared the CTF; there are four secret ones left.', () => ccHiddenQuests(), /quest|hidden|secret/]);
     if (!seen.has('about')) steps.push(['**Meet Neox.** Who built this place, and what they do all day.', () => ccAbout(), /neox|meet|who|about/]);
     else if (!seen.has('projects')) steps.push(['**See what Neox has built.** InfraEye, DeployForge, a guitar rig in C++ and more.', () => ccProjects(), /project|built|work/]);
