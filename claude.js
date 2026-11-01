@@ -574,15 +574,21 @@ async function ccSearch(q) {
     return true;
 }
 
-async function ccFallback(q = '') {
+async function ccFallback(q = '', raw = q) {
     if (await ccSearch(q)) return;
-    const next = ccNextCtf();
-    await ccSay(pick([
-        `Hmm, I'm not sure I can help with that from in here: I can only see this box. I'm good with Neox's work, ${next ? `the ${next.name} challenge` : 'the hidden quests'}, or finding your way around. What sounds good?`,
-        `That's outside what I can reach from this machine. Want a quick tour instead? Or I can help you with ${next ? `the ${next.name} challenge` : 'the hidden quests'}.`,
-        "I don't have a good answer for that one. Here, I'm most useful for Neox's background, the CTF, or finding your way around. Pick one?",
-    ]));
-    cc.offer = () => ccTour();
+    // Misses in a row get shorter and more concrete, and the same wording never comes twice.
+    cc.misses = cc.missTurn === cc.turns - 1 ? (cc.misses || 0) + 1 : 1;
+    cc.missTurn = cc.turns;
+    const gist = raw.trim().replace(/[?.!]+$/, '');
+    const quoted = gist.length > 2 && gist.length <= 48 ? `"${esc(gist)}"` : 'that';
+    if (cc.misses === 1) {
+        await ccSay(`${pick([`I don't have anything on ${quoted}, I'm afraid. I can only see this machine, and nothing on it covers that.`, `I looked, but nothing on this box covers ${quoted}. I'd rather say so than make something up.`])}\n\nHere's what I *can* do right now:\n\n${ccMenu(ccNextSteps())}\n\nOr put it another way and I'll take another look.`);
+    } else if (cc.misses === 2) {
+        await ccSay(`Still nothing on that one, sorry. I'm sharpest on concrete questions about this box, like *"what has Neox built?"*, *"how do I get root?"* or *"explain port knocking"*. Want to try one of those?`);
+        cc.offer = () => ccProjects();
+    } else {
+        await ccSay(`I'm clearly not getting it, so let me make it easy: say **tour**, **ctf** or **neox** and I'll take it from there.`);
+    }
 }
 
 // Intents for things the first pass doesn't cover, checked after CC_INTENTS.
@@ -647,6 +653,7 @@ const CC_MORE_INTENTS = [
     [/^(lol|lmao|haha+|hehe|rofl|xd)\b/, () => ccSay(pick(['Glad something landed. What next?', 'Ha. What would you like to look at?']))],
     [/^(ok|okay|cool|nice|great|awesome|got it|i see|alright|hmm+|interesting)[.!]*$/, () => ccSay(pick(['Anything else you want to explore?', 'What would you like to look at next?', 'Want a hint on the CTF, or something about Neox?']))],
     [/good (night|bye)|gn\b/, () => ccSay('Good night! The box will be here tomorrow, flags and all.')],
+    [/what('?s| is) (going on|happening|happenin|up with this)|what (do|can) you know|what do you have|what('?s| is) (here|on (this|the) box)|^i (don'?t|dont|do not) know|^(i'?m )?(not sure|no idea|confused|lost)|^now what|where am i/, (q) => ccOrient(q)],
     [/what should i (do|try|ask)|any (ideas|suggestions)|bored/, async () => {
         const next = ccNextCtf();
         await ccSay(`A few ideas: ${next ? `crack **${next.name}** in the CTF, ` : ''}play Fretwork in the arcade (Alt+G), open the InfraEye demo and hit "Simulate incident" (Alt+I), or try \`htop\` and \`cmatrix\` here. Want me to start one?`);
@@ -714,6 +721,51 @@ function ccUnseen() {
     return `We haven't looked at ${next[1]} yet, though. Want to?`;
 }
 
+
+// Up to three next steps that fit where the visitor is: CTF progress, what they haven't seen yet.
+function ccNextSteps() {
+    const seen = new Set(cc.history.map((t) => (t.subject?.ch ? 'ctf' : t.subject?.topic)));
+    const next = ccNextCtf();
+    const solved = ccMainCtf().length - ccMainCtf().filter((ch) => !ctfSolved()[ch.id]).length;
+    const steps = [];
+    if (next && solved) steps.push([`**Keep hacking.** You're on **${next.name}**; I can give you a nudge without spoiling it.`, () => ccCtfHint(next), /hack|ctf|hint|flag|nudge|challenge/]);
+    else if (next) steps.push(['**Break into this box.** Six flags are hidden in it, from warm-up to root. I\'ll guide, not spoil.', () => ccCtfOverview(), /hack|ctf|flag|challenge|break/]);
+    else steps.push(['**Hunt the hidden quests.** You\'ve cleared the CTF; there are four secret ones left.', () => ccHiddenQuests(), /quest|hidden|secret/]);
+    if (!seen.has('about')) steps.push(['**Meet Neox.** Who built this place, and what they do all day.', () => ccAbout(), /neox|meet|who|about/]);
+    else if (!seen.has('projects')) steps.push(['**See what Neox has built.** InfraEye, DeployForge, a guitar rig in C++ and more.', () => ccProjects(), /project|built|work/]);
+    else steps.push(['**Read the one-page CV.** Everything above, on a single page.', () => ccResume(), /cv|resume|page/]);
+    if (!seen.has('tour')) steps.push(['**Take the tour.** This is a working Linux desktop; I\'ll show you the good bits.', () => ccTour(), /tour|desktop|around|show/]);
+    else steps.push(['**Play something.** Seven original games in the arcade.', () => ccOpenApp('arcade'), /play|game|arcade/]);
+    return steps;
+}
+
+// Lists the steps as a numbered menu and waits for "2", "the second one", a keyword or a plain "yes".
+function ccMenu(steps) {
+    const offer = (q) => {
+        const n = q.match(/^(?:the )?(1|2|3|one|two|three|first|second|third|last)\b/)?.[1];
+        const i = n ? ['1', '2', '3', 'one', 'two', 'three', 'first', 'second', 'third'].indexOf(n) % 3 : -1;
+        const step = n === 'last' ? steps[steps.length - 1] : steps[i] || steps.find(([, , re]) => re.test(q)) || steps[0];
+        return step[1]();
+    };
+    offer.choose = (q) => /^(?:the )?(1|2|3|one|two|three|first|second|third|last)\b/.test(q) || steps.some(([, , re]) => re.test(q) && q.split(' ').length <= 4);
+    cc.offer = offer;
+    return steps.map(([text], i) => `${i + 1}. ${text}`).join('\n');
+}
+
+// "What is going on?", "what do you know?", "I don't know": the visitor needs bearings, not a shrug.
+async function ccOrient(q) {
+    const hi = !!cc.name;
+    let intro;
+    if (/what (do|can) you know|what do you have|what('?s| is) (here|on (this|the) box)/.test(q)) {
+        intro = "Everything on this box, which turns out to be a fair amount: Neox's background and work, the projects, how this desktop works, a good deal of security and Linux, and exactly where the CTF flags are hidden (I'll only ever hint at those). What I don't have is the internet, so the news and the wider world are out of reach.";
+    } else if (/(don'?t|dont|do not) know|not sure|no idea|confused|lost|now what/.test(q)) {
+        intro = pick([`That's fine${hi ? `, ${cc.name}` : ''}: most people land here without a plan. Here's what tends to be worth it:`, `No problem${hi ? `, ${cc.name}` : ''}, that's what I'm for. A few good ways in:`]);
+        return ccSay(`${intro}\n\n${ccMenu(ccNextSteps())}\n\nJust say a number.`);
+    } else {
+        intro = `${hi ? `Good question, ${cc.name}. ` : ''}Short version: you're on Neox's portfolio, built as a working Linux desktop. Nearly everything here is real enough to poke at: the shell, the apps, even a hacking challenge hidden in the filesystem. I'm the guide.`;
+    }
+    await ccSay(`${intro}\n\nWhere would you like to start?\n\n${ccMenu(ccNextSteps())}\n\nPick a number, or just ask me anything.`);
+}
 async function ccRevisit(entry) {
     const s = entry.subject;
     const label = ccSubjectLabel(s);
@@ -846,6 +898,7 @@ async function ccAnswer(raw) {
     let q = ccClean(raw);
     const offer = cc.offer;
     cc.offer = null;
+    if (offer?.choose?.(q)) return offer(q);
     if (offer && (CC_YES.test(q) || /^((open|launch|run|show|start|play) (it|that|them)|do it|show me)( for me)?( please)?$/.test(q))) return offer(q);
     if (offer && CC_NO.test(q)) return ccSay(pick(['No problem. What would you like to do instead?', 'Sure thing. Anything else on your mind?']));
     // "And CyberLynX?", "what about the k8s one?": the same kind of question about something else.
@@ -899,7 +952,7 @@ async function ccRoute(q, raw) {
     }
     const anyTerm = CC_TERMS.find(([re]) => re.test(q));
     if (anyTerm) return ccDefine(anyTerm);
-    return ccFallback(q);
+    return ccFallback(q, raw);
 }
 
 // ---------- the session ----------
