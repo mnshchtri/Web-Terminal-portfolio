@@ -921,7 +921,7 @@ function ccWelcome() {
     // pixel art over three rows of reserved space, since block characters leave gaps between lines.
     const pixels = CC_MASCOT.flatMap((r, y) => [...r].map((p, x) => (p === '#' ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ''))).join('');
     const art = `<svg class="cc-mascot" viewBox="0 0 11 6" shape-rendering="crispEdges" aria-hidden="true">${pixels}</svg>`;
-    const mascot = [`<span class="cc-mascot-slot">${' '.repeat(12)}${art}</span>`, ' '.repeat(12), ' '.repeat(12)];
+    const mascot = [`<span class="cc-mascot-slot">${' '.repeat(12)}${art}</span>`, `<span>${' '.repeat(12)}</span>`, `<span>${' '.repeat(12)}</span>`];
     print([
         ccOrange(`╭${'─'.repeat(w - 1)}╮`),
         row(),
@@ -964,8 +964,9 @@ function ccInputMode(on) {
     // During a session the input band sits on the window's bottom edge, however short the chat is.
     terminal.classList.toggle('cc-session', on || state.busy);
     input.placeholder = on ? pick(['Try "who is Neox?"', 'Try "how do I get root?"', 'Try "give me a tour"']) : '';
-    if (inputLine.nextElementSibling?.classList.contains('cc-foot')) inputLine.nextElementSibling.remove();
-    if (on) inputLine.insertAdjacentHTML('afterend', `<div class="cc-foot">${ccFootHtml()}</div>`);
+    // The status line lives inside the input band, so the two are pinned as one solid block.
+    inputLine.querySelector('.cc-foot')?.remove();
+    if (on) inputLine.insertAdjacentHTML('beforeend', `<div class="cc-foot">${ccFootHtml()}</div>`);
 }
 
 function ccCycleMode(e) {
@@ -973,8 +974,8 @@ function ccCycleMode(e) {
     e.preventDefault();
     e.stopPropagation();
     ccMode = (ccMode + 1) % CC_MODES.length;
-    const foot = inputLine.nextElementSibling;
-    if (foot?.classList.contains('cc-foot')) foot.innerHTML = ccFootHtml();
+    const foot = inputLine.querySelector('.cc-foot');
+    if (foot) foot.innerHTML = ccFootHtml();
 }
 
 function ccSlash(cmd) {

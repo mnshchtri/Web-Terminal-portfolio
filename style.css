@@ -1541,29 +1541,26 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
 .term.cc-session { display: flex; flex-direction: column; }
 .term.cc-session > .output { flex: 1 0 auto; }
 
-/* The input band and its status line stay pinned to the bottom of the window while the chat scrolls. */
+/* The input band and its status line (a child of it) stay pinned to the bottom of the window while the
+   chat scrolls. One sticky block, so nothing scrolls through a gap between them. */
 .input-line.cc-input {
     position: sticky;
-    bottom: calc(1.45em + 18px);
+    bottom: -14px;
     z-index: 2;
-    margin: 8px -14px 0;
-    padding: 4px 14px;
+    flex-wrap: wrap;
+    margin: 8px -14px -14px;
+    padding: 4px 14px 0;
     border-top: 1px solid #5a5a5a;
-    border-bottom: 1px solid #5a5a5a;
     background: var(--bg);
-    box-shadow: 0 -8px 0 0 var(--bg);
 }
 .input-line.cc-input .prompt { color: var(--dim); }
 .input-line.cc-input .user-input::placeholder { color: var(--dim); }
 .cc-foot {
-    position: sticky;
-    bottom: -14px;
-    z-index: 1;
-    margin: 0 -14px -14px;
+    flex: 0 0 calc(100% + 28px);
+    box-sizing: border-box;
+    margin: 4px -14px 0;
     padding: 6px 14px 14px;
-    background: var(--bg);
-    /* Fills the gap up to the input band, which sits above it. */
-    box-shadow: 0 -24px 0 0 var(--bg);
+    border-top: 1px solid #5a5a5a;
     color: var(--dim);
     white-space: pre;
     overflow: hidden;
