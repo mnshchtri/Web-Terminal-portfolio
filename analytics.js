@@ -42,6 +42,8 @@ function cmdPrivacy() {
         `${c('ok', 'Counted:')} page views, the referring site, country, browser, device and page-load speed.`,
         `${c('err', 'Never:')}  cookies, tracking across sites, or anything you do or type in here.`,
         '',
+        `${c('hl', 'Kept in this browser only:')} shell history, CTF progress, settings, and claude's memory of your chat (${c('exe', '/clear')} inside claude forgets it).`,
+        '',
         `Status:  ${esc(analyticsStatus())}`,
         `Opt out: ${c('exe', 'analytics off')}   (Do Not Track and Global Privacy Control are honoured automatically)`,
     ];

@@ -4,7 +4,8 @@
 // input, spinner, ● replies, ● Bash(...) tool calls with ⎿ output, slash commands). Underneath it is
 // scripted: intents matched by pattern, with a memory of the conversation (every question and what
 // it was about, the visitor's name and role, an offer waiting for a "yes"), so "it", "go back to that"
-// and "what did I ask first?" work. Real commands run on this box to show things. No network, no AI.
+// and "what did I ask first?" work; it's kept in this browser, so returning visitors are recognised.
+// Real commands run on this box to show things. No network, no AI.
 // It never prints a flag or the root password: tool output is redacted (ccRedact) and CTF help comes
 // as hints. Asked sincerely what it is, it deflects in character but never claims to be Anthropic's.
 
@@ -317,7 +318,9 @@ const CC_INTENTS = [
     [/^(hi|hello|hey|heya|yo|namaste|sup|hiya|howdy|hola|good (morning|evening|afternoon))\b/, async () => {
         const prev = ccLastSubject();
         if (prev) {
-            await ccSay(`Hey again${cc.name ? ` ${cc.name}` : ''}! We were on ${ccSubjectLabel(prev.subject)}. Pick that back up, or something new?`);
+            await ccSay(prev.old
+                ? `Welcome back${cc.name ? `, ${cc.name}` : ''}! Last time you were here we talked about ${ccSubjectLabel(prev.subject)}. Pick that back up, or something new?`
+                : `Hey again${cc.name ? ` ${cc.name}` : ''}! We were on ${ccSubjectLabel(prev.subject)}. Pick that back up, or something new?`);
             cc.offer = () => ccRevisit(prev);
             return;
         }
@@ -723,7 +726,7 @@ async function ccRecall(q) {
     const asked = cc.history.filter((t) => !t.minor);
     const facts = [cc.name && `you're ${cc.name}`, cc.role && `you're ${/^[aeiou]/.test(cc.role) ? 'an' : 'a'} ${cc.role}`].filter(Boolean);
     const topics = [...new Set(cc.history.map((t) => ccSubjectLabel(t.subject)).filter(Boolean))];
-    const quote = (t) => `"${ccRedact(t.raw)}"${ccSubjectLabel(t.subject) ? `, about ${ccSubjectLabel(t.subject)}` : ''}`;
+    const quote = (t) => `"${ccRedact(t.raw)}"${ccSubjectLabel(t.subject) ? `, about ${ccSubjectLabel(t.subject)}` : ''}${t.old && cc.history.some((x) => !x.old) ? ', on your last visit' : ''}`;
     if (/about me|remember me|my name/.test(q) || !asked.length) {
         const known = facts.length ? `I know ${ccList(facts)}.` : "You haven't told me your name yet.";
         if (!asked.length) return ccSay(`${facts.length ? `${known} ` : ''}We've only just started, so there's not much to look back on yet. What would you like to know?`);
@@ -913,7 +916,7 @@ function ccWelcome() {
         c('dim', " 2. Use Claude for help with the CTF: it guides, it won't spoil"),
         c('dim', ' 3. Be as specific as you would with another engineer for the best results'),
         '',
-        ` ${c('dim', '※ Tip:')} ${c('dim', cc.history.some((t) => !t.minor) ? '`claude -c` continues your last conversation; I still remember it either way' : pick(['Try "how do I get root?"', 'Try "give me a tour"', 'Try "who is Neox?"', 'Try "help me with the CTF"']))}`,
+        ` ${c('dim', '※ Tip:')} ${c('dim', ccWelcomeBack() || (cc.history.some((t) => !t.minor) ? '`claude -c` continues your last conversation; I still remember it either way' : pick(['Try "how do I get root?"', 'Try "give me a tour"', 'Try "who is Neox?"', 'Try "help me with the CTF"'])))}`,
         '',
     ]);
 }
@@ -956,6 +959,8 @@ function ccCycleMode(e) {
 function ccSlash(cmd) {
     if (cmd === '/clear') {
         Object.assign(cc, { name: '', role: '', last: null, offer: null, history: [] });
+        ccTranscript.replaceChildren();
+        ccForget();
         output.innerHTML = '';
         ccWelcome();
         return true;
@@ -1022,6 +1027,7 @@ async function ccTurn(raw) {
         const q = ccClean(raw);
         const minor = CC_YES.test(q) || CC_NO.test(q) || CC_MORE.test(q) || CC_RECALL.test(q) || /^(ok|okay|cool|nice|great|lol|lmao|haha+|thanks|thank you|thx|ty|hmm+)\b/.test(q);
         cc.history.push({ raw, q, norm: ccNorm(q), subject: cc.last !== before ? cc.last : null, minor });
+        ccSave();
     }
     if (state.abort) print(c('err', '  ⎿  Interrupted by user'));
     state.abort = false;
@@ -1030,6 +1036,67 @@ async function ccTurn(raw) {
 
 // The last session's screen, for `claude -c`.
 const ccTranscript = document.createDocumentFragment();
+
+// ---------- remembering the visitor across visits ----------
+
+// Name, role, the conversation and the last screen are kept in localStorage: in this browser only,
+// never sent anywhere. `/clear` forgets all of it.
+const CC_STORE = 'nsh_claude';
+const CC_SCREEN_MAX = 150000;
+
+function ccSave(nodes) {
+    // Nothing worth remembering (a fresh visitor, or just after /clear).
+    if (!cc.history.length && !cc.name) return ccForget();
+    try {
+        const saved = JSON.parse(localStorage.getItem(CC_STORE) || '{}');
+        if (nodes) {
+            // Newest lines first, until the size budget runs out.
+            const html = [];
+            let size = 0;
+            for (const node of [...nodes].reverse()) {
+                const part = node.outerHTML ?? esc(node.textContent);
+                if ((size += part.length) > CC_SCREEN_MAX) break;
+                html.unshift(part);
+            }
+            saved.screen = html.join('');
+        }
+        const history = cc.history.slice(-60).map((t) => ({ raw: t.raw, q: t.q, norm: t.norm, minor: t.minor, subject: t.subject && { ...t.subject, ch: t.subject.ch?.id } }));
+        localStorage.setItem(CC_STORE, JSON.stringify({ ...saved, name: cc.name, role: cc.role, history, seen: Date.now() }));
+    } catch {
+        // storage full or disabled: memory just won't outlive the page
+    }
+}
+
+function ccForget() {
+    localStorage.removeItem(CC_STORE);
+}
+
+function ccLoad() {
+    let saved;
+    try {
+        saved = JSON.parse(localStorage.getItem(CC_STORE) || 'null');
+    } catch {
+        return;
+    }
+    if (!saved) return;
+    cc.name = saved.name || '';
+    cc.role = saved.role || '';
+    cc.history = (saved.history || []).map((t) => ({ ...t, old: true, subject: t.subject && { ...t.subject, ch: t.subject.ch && CTF.find((ch) => ch.id === t.subject.ch) } }));
+    if (saved.screen) {
+        const tpl = document.createElement('template');
+        tpl.innerHTML = saved.screen;
+        ccTranscript.append(tpl.content);
+    }
+}
+
+// The welcome screen's tip for someone who's been here before (and hasn't said anything yet this visit).
+function ccWelcomeBack() {
+    if (!cc.history.length || cc.history.some((t) => !t.old)) return '';
+    const last = ccLastSubject();
+    return `Welcome back${cc.name ? `, ${cc.name}` : ''}.${last ? ` Last time: ${toText(ccSubjectLabel(last.subject))}.` : ''} \`claude -c\` brings that chat back`;
+}
+
+ccLoad();
 
 async function cmdClaude({ args }) {
     if (args[0] === '--version' || args[0] === '-v') return [`${CC_VERSION} (Claude Code)`];
@@ -1067,6 +1134,7 @@ async function cmdClaude({ args }) {
             print('');
             await ccTurn(raw);
             print('');
+            ccSave(screen.childNodes);
             if (ccLeaving) break;
             ccInputMode(true);
         }
@@ -1076,6 +1144,7 @@ async function cmdClaude({ args }) {
         terminal.classList.remove('cc-session');
         ccLeaving = false;
         ccTranscript.replaceChildren(...screen.childNodes);
+        ccSave(ccTranscript.childNodes);
         screen.replaceChildren(scrollback);
         screen.parentElement.scrollTop = screen.parentElement.scrollHeight;
     }
