@@ -1530,9 +1530,13 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
 .cc-msg .cc-pre { text-indent: 0; }
 .cc-msg i { font-style: italic; }
 .cc-tool { font-weight: 700; }
+.cc-mascot-slot { position: relative; }
+.cc-mascot { position: absolute; top: 0.4em; left: 0.5ch; height: 3.6em; fill: #d97757; }
 .cc-code { color: #b1b9f9; }
 .cc-pre { margin: 4px 0 4px 2ch; padding-left: 1ch; border-left: 2px solid var(--line); color: var(--fg); }
 .cc-out { opacity: 0.9; }
+/* A blank line between blocks (replies and tool calls), as in Claude Code. */
+:is(.cc-msg, .cc-call, .cc-out) + :is(.cc-msg, .cc-call) { margin-top: 1.45em; }
 .cc-out .ls-grid { margin: 2px 0 0 5ch; }
 .term.cc-session { display: flex; flex-direction: column; }
 .term.cc-session > .output { flex: 1 0 auto; }

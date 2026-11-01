@@ -1378,6 +1378,8 @@ function ask(label, secret) {
         input.value = '';
         inputLine.hidden = false;
         input.focus();
+        // A prompt shown after a long reply must not cover its last lines.
+        terminal.scrollTop = terminal.scrollHeight;
     });
 }
 

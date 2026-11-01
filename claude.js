@@ -102,6 +102,13 @@ function ccRedact(text) {
 
 function ccToolHeader(name, arg, ok = true) {
     print(`${c(ok ? 'ok' : 'err', '●')} ${c('cc-tool', name)}(${esc(arg)})`);
+    output.lastElementChild.classList.add('cc-call');
+}
+
+// A dim line under a tool call (⎿ status, "… +N lines").
+function ccToolNote(text) {
+    print(c('dim', text));
+    output.lastElementChild.classList.add('cc-out');
 }
 
 // Runs a command on this box with its output captured (not a TTY) and redacted, shown as a tool call.
@@ -130,8 +137,8 @@ async function ccBash(cmd, maxLines = 8) {
         line.innerHTML = `${c('dim', i ? '   ' : '  ⎿')} ${ccRedact(line.innerHTML)}`;
         output.appendChild(line);
     });
-    if (!lines.length) print(c('dim', '  ⎿  (No content)'));
-    if (lines.length > maxLines) print(c('dim', `     … +${lines.length - maxLines} lines (ctrl+r to expand)`));
+    if (!lines.length) ccToolNote('  ⎿  (No content)');
+    if (lines.length > maxLines) ccToolNote(`     … +${lines.length - maxLines} lines (ctrl+r to expand)`);
     terminal.scrollTop = terminal.scrollHeight;
     return code;
 }
@@ -141,14 +148,14 @@ async function ccRead(path) {
     const node = getNode(abs);
     const ok = node?.type === 'file' && !isForbidden(abs);
     ccToolHeader('Read', tildify(abs), ok);
-    print(c('dim', `  ⎿  ${ok ? `Read ${textLines(node.content).length} lines` : 'Permission denied'}`));
+    ccToolNote(`  ⎿  ${ok ? `Read ${textLines(node.content).length} lines` : 'Permission denied'}`);
 }
 
 // Opening an app hands the visitor over to it, so the session ends after the reply.
 let ccLeaving = false;
 function ccOpen(label, open) {
     ccToolHeader('OpenApp', label);
-    print(c('dim', '  ⎿  Opened next to this terminal'));
+    ccToolNote('  ⎿  Opened next to this terminal');
     open();
     ccLeaving = true;
 }
@@ -264,7 +271,7 @@ Want to start with Neox's background, or jump into the CTF?`);
 async function ccAbout() {
     cc.last = { topic: 'about' };
     await ccSay('Let me pull that from the source rather than paraphrase.');
-    await ccBash('head -8 ~neox/about.txt');
+    await ccBash('head -6 ~neox/about.txt');
     await ccSay("So: Manish Karki, aka **Neox**, a DevSecOps engineer in Kathmandu who came up through offensive security. Day to day that's bare-metal Kubernetes, CI/CD and Zero Trust; on the side, custom security tooling and music.\n\nWant the work history, the projects, or the one-page CV?");
     cc.offer = (q) => (/project|built/.test(q) ? ccProjects() : /cv|resume|résumé/.test(q) ? ccResume() : ccExperience());
 }
@@ -897,17 +904,31 @@ async function ccRoute(q, raw) {
 
 // ---------- the session ----------
 
+const CC_MASCOT = [
+    '  #######  ',
+    '  #.###.#  ',
+    '###########',
+    '  #######  ',
+    '  #.#.#.#  ',
+    '  #.#.#.#  ',
+];
+
 function ccWelcome() {
     const cwd = state.cwd;
-    const w = Math.max(54, cwd.length + 12);
+    const w = Math.max(64, cwd.length + 22);
     const row = (html = '') => `${ccOrange('│')} ${html}${' '.repeat(Math.max(0, w - 2 - toText(html).length))}${ccOrange('│')}`;
+    // The mascot sits beside the welcome text, as on Claude Code's own start screen. It's drawn as
+    // pixel art over three rows of reserved space, since block characters leave gaps between lines.
+    const pixels = CC_MASCOT.flatMap((r, y) => [...r].map((p, x) => (p === '#' ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ''))).join('');
+    const art = `<svg class="cc-mascot" viewBox="0 0 11 6" shape-rendering="crispEdges" aria-hidden="true">${pixels}</svg>`;
+    const mascot = [`<span class="cc-mascot-slot">${' '.repeat(12)}${art}</span>`, ' '.repeat(12), ' '.repeat(12)];
     print([
         ccOrange(`╭${'─'.repeat(w - 1)}╮`),
-        row(`${ccOrange('✻')} Welcome to ${c('b', 'Claude Code')}!`),
         row(),
-        row(c('dim', '  /help for help, /status for your current setup')),
+        row(`${mascot[0]}${ccOrange('✻')} Welcome to ${c('b', 'Claude Code')}!`),
+        row(`${mascot[1]}${c('dim', '/help for help, /status for your current setup')}`),
+        row(`${mascot[2]}${c('dim', `cwd: ${esc(cwd)}`)}`),
         row(),
-        row(c('dim', `  cwd: ${esc(cwd)}`)),
         ccOrange(`╰${'─'.repeat(w - 1)}╯`),
         '',
         c('dim', ' Tips for getting started:'),
