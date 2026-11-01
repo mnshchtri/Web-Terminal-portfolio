@@ -1,0 +1,122 @@
+% Manish Karki: CV. Build with `tectonic cv/Manish-Karki-CV.tex`; the PDF it writes next to this
+% file is what the site's "Download PDF" button serves, so commit both.
+%
+% Kept ATS-friendly on purpose: one column, no tables, icons or graphics, standard section
+% names, real text for every link, no hyphenation (so keywords survive parsing). The phone
+% number is deliberately left out of this public copy.
+% The wording matches RESUME in resume.js; change both together.
+
+\documentclass[10pt]{article}
+\linespread{0.96}
+
+\usepackage[a4paper, margin=1.5cm, top=1cm, bottom=0.9cm]{geometry}
+\usepackage{fontspec}
+\setmainfont{texgyreheros}[Extension=.otf, Ligatures=NoCommon, UprightFont=*-regular, BoldFont=*-bold, ItalicFont=*-italic, BoldItalicFont=*-bolditalic]
+\usepackage[dvipsnames]{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\hypersetup{
+    pdftitle={Manish Karki - CV - DevSecOps Engineer},
+    pdfauthor={Manish Karki},
+    pdfsubject={Curriculum vitae},
+    pdfkeywords={DevSecOps, Kubernetes, CI/CD, Jenkins, Docker, HAProxy, Nginx, PostgreSQL, Zero Trust, Penetration Testing, Go, Python, Bash, Wazuh, SIEM},
+}
+
+\definecolor{accent}{HTML}{1F4E8C}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\raggedright
+
+\titleformat{\section}{\large\bfseries\color{accent}}{}{0pt}{\MakeUppercase}[\vspace{1pt}\titlerule]
+\titlespacing*{\section}{0pt}{6pt}{2pt}
+
+\setlist[itemize]{leftmargin=1.1em, topsep=0.5pt, itemsep=0pt, parsep=0pt, label=\textbullet}
+
+% \job{Role}{Organisation}{Dates}{Location}
+% Everything on one left-aligned line, in reading order: right-aligned dates get pulled out of
+% place by some ATS text extractors.
+\newcommand{\job}[4]{%
+    \textbf{#1}, #2 {\color{darkgray}| #4 | #3}\par}
+% \project{Name}{Stack}{Link or note}
+\newcommand{\project}[3]{%
+    \textbf{#1} {\color{darkgray}| #2 | #3}\par}
+
+\begin{document}
+
+{\LARGE\bfseries Manish Karki}\par
+\vspace{2pt}
+{\large DevSecOps Engineer}\par
+\vspace{3pt}
+{\small Kathmandu, Nepal (open to remote) | \href{mailto:mnshchtri@gmail.com}{mnshchtri@gmail.com} | \href{https://www.linkedin.com/in/manish-karki-959107171/}{linkedin.com/in/manish-karki-959107171}\\
+\href{https://github.com/mnshchtri}{github.com/mnshchtri} | \href{https://manishkarki7.com.np}{manishkarki7.com.np} | \href{https://terminal.manishkarki7.com.np}{terminal.manishkarki7.com.np}}\par
+
+\section{Summary}
+DevSecOps Engineer who runs and secures bare-metal, fintech-grade production infrastructure: self-hosted Kubernetes, Jenkins CI/CD, HAProxy and Nginx load balancing, PostgreSQL and Zero Trust controls. Came up through offensive security (penetration testing, vulnerability assessment, red-team simulation), so systems get built the way an attacker would test them. Automates with Go, Python and Bash; creator of InfraEye, an open-source observability platform.
+
+\section{Skills}
+\textbf{DevOps \& Platform:} Kubernetes (bare metal), Docker, BuildKit, Helm, Jenkins, GitHub Actions, CI/CD, HAProxy, Nginx, Infrastructure as Code, Linux administration\\
+\textbf{Security:} Penetration Testing, Vulnerability Assessment, Zero Trust, IAM, OWASP Top 10, MITRE ATT\&CK, CVE analysis, Wazuh (SIEM), Nessus, Burp Suite, Nmap, Metasploit, Wireshark\\
+\textbf{Cloud \& Data:} AWS (security, architecting, operations), PostgreSQL, Redis, SQLite\\
+\textbf{Languages:} Go, Python, Bash, TypeScript, React, SQL, Java, C++\\
+\textbf{Networking:} TCP/IP, DNS, VPN, OSPF, firewalls (nftables), packet analysis
+
+\section{Experience}
+\job{DevSecOps Engineer}{Citytech}{May 2026 -- Present}{Kathmandu, Nepal}
+\begin{itemize}
+    \item Operate and harden bare-metal infrastructure for a banking/fintech production system, owning provisioning, hardening and lifecycle management without managed cloud services.
+    \item Deploy and run microservices on self-hosted Kubernetes; build and maintain Jenkins CI/CD pipelines for build, test and release.
+    \item Eliminated recurring deployment downtime on the bank's live services by designing a rolling-deployment strategy behind HAProxy and Nginx with health-check-gated cutover, achieving near-zero-downtime releases.
+    \item Administer PostgreSQL behind the microservices, keeping data available through every deployment cycle.
+    \item Introduced Zero Trust controls: least-privilege access, network segmentation and service-level authentication.
+\end{itemize}
+
+\vspace{2pt}
+\job{Offensive Security Intern}{InRED Labs}{Jul 2025 -- Oct 2025}{Kathmandu, Nepal}
+\begin{itemize}
+    \item Performed vulnerability assessments and penetration tests on internal web applications and network infrastructure, from recon and enumeration through exploitation and post-exploitation (Nmap, Burp Suite, Metasploit).
+    \item Reported findings with CVE references and remediation guidance; automated recon and reporting in Python and Bash.
+    \item Ran realistic attack simulations with the blue team, mapped to MITRE ATT\&CK, including privilege-escalation testing.
+\end{itemize}
+
+\vspace{2pt}
+\job{IT Support and SOP Reviewer}{Uni Express}{Feb 2023 -- Dec 2024}{Kathmandu, Nepal}
+\begin{itemize}
+    \item Managed IT infrastructure and endpoint protection; reviewed 100+ academic Statements of Purpose.
+\end{itemize}
+
+\vspace{2pt}
+\job{IT Technician and SOP Reviewer}{Yes International Education}{Nov 2018 -- Feb 2021}{Kathmandu, Nepal}
+\begin{itemize}
+    \item Maintained systems and network infrastructure, implemented security protocols, and ran backup and recovery.
+\end{itemize}
+
+\section{Projects}
+\project{InfraEye}{Go, React, TypeScript, PostgreSQL, Redis, Wails}{github.com/mnshchtri/infra-eye}
+\begin{itemize}
+    \item Agentless infrastructure observability platform (creator and maintainer): real-time telemetry across bare metal and Kubernetes, and a self-healing engine that turns alert rules into automated SSH remediation.
+    \item Kubernetes diagnostics, AI-driven log analysis over LLM/MCP, OIDC single sign-on (Keycloak, Auth0, Okta, Azure AD), and a native macOS/Linux desktop app shipped via Homebrew.
+\end{itemize}
+\project{DeployForge}{Kubernetes, BuildKit}{private}
+\begin{itemize}
+    \item Self-hosted deployment platform: builds each commit with BuildKit, rolls out beside the live version and switches traffic only once healthy; preview deployments, one-click rollback, encrypted secrets, custom domains.
+\end{itemize}
+\vspace{1pt}
+\textbf{TrimurtiSec} {\color{darkgray}| Python}: penetration-testing framework with recon, exploitation and persistence modules and CVE-mapped reports.\par
+\textbf{secaudit} {\color{darkgray}| Bash}: read-only security audit for Arch Linux that scores the machine and suggests safe fixes.\par
+\textbf{Wazuh SIEM}: deployed agents and centralised logging; wrote and tested alert and correlation rules across hosts.\par
+
+\section{Education}
+\textbf{BSc (Hons) Computer Networking and IT Security}, Islington College, London Metropolitan University (completed)\par
+\textbf{B.E. Electronics and Communication Engineering}, Sagarmatha Engineering College, IOE (discontinued)\par
+
+\section{Certifications}
+AWS Academy: Cloud Security Foundations, Cloud Architecting, Cloud Operations, Cloud Foundations\\
+TCM Security: Practical Ethical Hacking | TryHackMe: SDLC Security, Docker Security, Pre-Security\\
+30+ TryHackMe and Hack The Box labs; regular CTFs (web, privilege escalation, scripting)
+
+\end{document}

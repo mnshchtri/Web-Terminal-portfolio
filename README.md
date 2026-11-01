@@ -3,7 +3,7 @@ A portfolio that behaves like my Linux desktop (Omarchy on Hyprland) — a boot 
 
 https://mnshchtri.github.io/Web-Terminal-portfolio/
 
-**Recruiters:** https://mnshchtri.github.io/Web-Terminal-portfolio/#resume skips the boot and opens my one-page CV (Download PDF is one click). On the desktop, it's the **Hire me** button in the top bar.
+**Recruiters:** https://mnshchtri.github.io/Web-Terminal-portfolio/#resume skips the boot and opens my one-page CV (Download PDF is one click: an ATS-friendly one-pager built from LaTeX, source in `cv/`). On the desktop, it's the **Hire me** button in the top bar.
 
 Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-eye`, `weather`, `gh repo list`, `git clone https://github.com/mnshchtri/infra-eye`, `theme list` — or run `ctf` and start hunting flags.
 
