@@ -11,6 +11,7 @@ const SYS = {
         [1, 'root', 0.0, 0.1, '/sbin/init'],
         [312, 'root', 0.0, 0.2, '/usr/lib/systemd/systemd-journald'],
         [348, 'root', 0.0, 0.1, '/usr/lib/systemd/systemd-udevd'],
+        [360, 'systemd-resolve', 0.0, 0.1, '/usr/lib/systemd/systemd-resolved'],
         [380, 'root', 0.1, 0.1, '/usr/lib/iwd/iwd'],
         [401, 'root', 0.0, 0.1, 'sshd: /usr/bin/sshd -D'],
         [420, 'root', 0.4, 0.6, '/usr/bin/dockerd -H fd://'],
@@ -26,6 +27,7 @@ const SYS = {
         [666, 'neox', 0.0, 0.0, 'curiosity --never-stop'],
         [700, 'neox', 1.6, 2.1, '/usr/bin/infra-eye --agentless'],
         [714, 'neox', 0.9, 1.3, 'deployforge-api --port 8443'],
+        [1336, 'neox', 0.0, 0.1, 'nsh-relay --port 1337'],
         [1337, GUEST, 0.0, 0.1, '-nsh'],
     ].map(([pid, user, cpu, mem, cmd]) => ({ pid, user, base: cpu, cpu, mem, cmd, time: Math.random() * 400 })),
     tick() {
@@ -215,6 +217,7 @@ const UNITS = {
     nftables: { desc: 'Netfilter Tables', oneshot: true },
     bluetooth: { desc: 'Bluetooth service', pid: 395, bin: '/usr/lib/bluetooth/bluetoothd' },
     'systemd-journald': { desc: 'Journal Service', pid: 312, bin: '/usr/lib/systemd/systemd-journald' },
+    'systemd-resolved': { desc: 'Network Name Resolution', pid: 360, bin: '/usr/lib/systemd/systemd-resolved' },
 };
 for (const unit of Object.values(UNITS)) unit.active = true;
 
@@ -469,6 +472,89 @@ async function cmdNmap({ args }) {
         '',
         `Nmap done: 1 IP address (1 host up) scanned in ${versions ? '6.42' : '0.08'} seconds`,
     ];
+}
+
+// ss: the sockets behind the services above. A socket disappears when its unit is stopped.
+// [proto, state, local, peer, pid, process name, fd, unit]
+const SOCKETS = [
+    ['udp', 'UNCONN', '127.0.0.54:53', '0.0.0.0:*', 360, 'systemd-resolve', 21, 'systemd-resolved'],
+    ['udp', 'UNCONN', '127.0.0.53%lo:53', '0.0.0.0:*', 360, 'systemd-resolve', 19, 'systemd-resolved'],
+    ['udp', 'UNCONN', '0.0.0.0:5355', '0.0.0.0:*', 360, 'systemd-resolve', 12, 'systemd-resolved'],
+    ['udp', 'UNCONN', '[::]:5355', '[::]:*', 360, 'systemd-resolve', 14, 'systemd-resolved'],
+    ['tcp', 'LISTEN', '127.0.0.54:53', '0.0.0.0:*', 360, 'systemd-resolve', 22, 'systemd-resolved'],
+    ['tcp', 'LISTEN', '127.0.0.53%lo:53', '0.0.0.0:*', 360, 'systemd-resolve', 20, 'systemd-resolved'],
+    ['tcp', 'LISTEN', '0.0.0.0:22', '0.0.0.0:*', 401, 'sshd', 3, 'sshd'],
+    ['tcp', 'LISTEN', '[::]:22', '[::]:*', 401, 'sshd', 4, 'sshd'],
+    ['tcp', 'LISTEN', '0.0.0.0:80', '0.0.0.0:*', 450, 'nginx', 6, 'nginx'],
+    ['tcp', 'LISTEN', '0.0.0.0:443', '0.0.0.0:*', 450, 'nginx', 7, 'nginx'],
+    ['tcp', 'LISTEN', '[::]:80', '[::]:*', 450, 'nginx', 8, 'nginx'],
+    ['tcp', 'LISTEN', '0.0.0.0:1337', '0.0.0.0:*', 1336, 'nsh-relay', 3],
+    ['tcp', 'LISTEN', '0.0.0.0:5432', '0.0.0.0:*', 470, 'postgres', 7, 'postgresql'],
+    ['tcp', 'LISTEN', '[::]:5432', '[::]:*', 470, 'postgres', 8, 'postgresql'],
+    ['tcp', 'LISTEN', '0.0.0.0:8443', '0.0.0.0:*', 714, 'deployforge-api', 11],
+    ['tcp', 'LISTEN', '0.0.0.0:9092', '0.0.0.0:*', 610, 'java', 142, 'kafka'],
+    ['tcp', 'LISTEN', '127.0.0.1:9093', '0.0.0.0:*', 610, 'java', 139, 'kafka'],
+    ['tcp', 'LISTEN', '0.0.0.0:9100', '0.0.0.0:*', 700, 'infra-eye', 8, 'infra-eye'],
+    ['tcp', 'LISTEN', '127.0.0.1:10248', '0.0.0.0:*', 512, 'kubelet', 21, 'kubelet'],
+    ['tcp', 'LISTEN', '127.0.0.1:34719', '0.0.0.0:*', 433, 'containerd', 12, 'containerd'],
+    ['tcp', 'LISTEN', '*:10250', '*:*', 512, 'kubelet', 23, 'kubelet'],
+    ['tcp', 'ESTAB', '127.0.0.1:41862', '127.0.0.1:5432', 700, 'infra-eye', 14, 'infra-eye'],
+    ['tcp', 'ESTAB', '127.0.0.1:5432', '127.0.0.1:41862', 4711, 'postgres', 9, 'postgresql'],
+    ['tcp', 'ESTAB', '127.0.0.1:41870', '127.0.0.1:5432', 714, 'deployforge-api', 15],
+    ['tcp', 'ESTAB', '127.0.0.1:5432', '127.0.0.1:41870', 4712, 'postgres', 9, 'postgresql'],
+    ['tcp', 'ESTAB', '192.168.1.42:22', '192.168.1.17:51544', 3301, 'sshd-session', 4, 'sshd'],
+    ['tcp', 'ESTAB', '192.168.1.42:48216', '10.20.0.5:1514', 530, 'wazuh-agentd', 6, 'wazuh-agent'],
+    ['tcp', 'ESTAB', '192.168.1.42:39004', '140.82.112.25:443', 700, 'infra-eye', 17, 'infra-eye'],
+    ['u_str', 'LISTEN', '/run/postgresql/.s.PGSQL.5432 18842', '* 0', 470, 'postgres', 9, 'postgresql'],
+    ['u_str', 'LISTEN', '/run/docker.sock 17110', '* 0', 1, 'systemd', 51, 'docker'],
+    ['u_str', 'LISTEN', '/run/containerd/containerd.sock 17305', '* 0', 433, 'containerd', 10, 'containerd'],
+    ['u_str', 'LISTEN', '/run/user/1000/hypr/.socket.sock 23187', '* 0', 601, 'Hyprland', 25],
+    ['u_str', 'LISTEN', '/run/user/1000/pipewire-0 22964', '* 0', 640, 'pipewire', 5],
+].map(([proto, st, local, peer, pid, name, fd, unit]) => ({ proto, st, local, peer, pid, name, fd, unit }));
+
+const SERVICES = { 22: 'ssh', 53: 'domain', 80: 'http', 443: 'https', 1514: 'fujitsu-dtcns', 5355: 'llmnr', 5432: 'postgresql', 8443: 'pcsync-https', 9092: 'XmlIpcRegSvc', 9093: 'copycat', 9100: 'jetdirect', 10250: '10250', 10248: '10248' };
+// Short-lived processes that ps doesn't list: postgres backends and an ssh session.
+const SOCK_OWNERS = { 3301: 'root', 4711: 'postgres', 4712: 'postgres' };
+const sockOwner = (sock) => SYS.procs.find((p) => p.pid === sock.pid)?.user ?? SOCK_OWNERS[sock.pid];
+
+function cmdSs({ args }) {
+    const { flags } = parseFlags(args.filter((a) => /^-[a-zA-Z0-9]+$/.test(a)));
+    if (args.some((a) => a === '-h' || a === '--help')) {
+        return ['Usage: ss [ OPTIONS ]', '   -n  don\'t resolve service names', '   -a  display all sockets', '   -l  display listening sockets',
+            '   -p  show process using socket', '   -s  show socket usage summary', '   -t  display only TCP sockets', '   -u  display only UDP sockets',
+            '   -x  display only Unix domain sockets', '   -4  display only IP version 4 sockets', '   -6  display only IP version 6 sockets', '   -H  suppress header line'];
+    }
+    const live = SOCKETS.filter((s) => !s.unit || UNITS[s.unit]?.active !== false);
+    if (flags.has('s')) {
+        const count = (p, st) => live.filter((s) => s.proto === p && (!st || s.st === st)).length;
+        return [
+            `Total: ${live.length + 214}`,
+            `TCP:   ${count('tcp') + 3} (estab ${count('tcp', 'ESTAB')}, closed 2, orphaned 0, timewait 1)`,
+            '',
+            'Transport Total     IP        IPv6',
+            `RAW\t  1         0         1`,
+            `UDP\t  ${count('udp')}         ${live.filter((s) => s.proto === 'udp' && !s.local.startsWith('[')).length}         ${live.filter((s) => s.proto === 'udp' && s.local.startsWith('[')).length}`,
+            `TCP\t  ${count('tcp')}        ${live.filter((s) => s.proto === 'tcp' && !s.local.startsWith('[')).length}        ${live.filter((s) => s.proto === 'tcp' && s.local.startsWith('[')).length}`,
+            `INET\t  ${count('tcp') + count('udp') + 1}        ${live.filter((s) => s.proto !== 'u_str' && !s.local.startsWith('[')).length}        ${live.filter((s) => s.local.startsWith('[')).length + 1}`,
+            'FRAG\t  0         0         0',
+        ];
+    }
+    const protos = ['t', 'u', 'x'].filter((f) => flags.has(f)).map((f) => ({ t: 'tcp', u: 'udp', x: 'u_str' }[f]));
+    let rows = live.filter((s) => (protos.length ? protos.includes(s.proto) : s.proto !== 'u_str' || flags.has('a') || flags.has('l')));
+    if (flags.has('4')) rows = rows.filter((s) => s.proto !== 'u_str' && !s.local.startsWith('['));
+    if (flags.has('6')) rows = rows.filter((s) => s.local.startsWith('['));
+    // Like the real ss: established sockets by default, listening ones with -l, both with -a.
+    if (!flags.has('a')) rows = rows.filter((s) => (flags.has('l') ? ['LISTEN', 'UNCONN'].includes(s.st) : s.st === 'ESTAB'));
+    const name = (addr) => (flags.has('n') ? addr : addr.replace(/:(\d+)$/, (m, port) => `:${SERVICES[port] ?? port}`));
+    // Without root, ss can only name the processes you own.
+    const proc = (s) => (isRoot() || sockOwner(s) === state.user ? `users:(("${s.name}",pid=${s.pid},fd=${s.fd}))` : '');
+    const cols = rows.map((s) => [s.proto, s.st, '0', s.st === 'LISTEN' ? '4096' : '0', name(s.local), name(s.peer), flags.has('p') ? proc(s) : '']);
+    const netid = protos.length !== 1;
+    const head = ['Netid', 'State', 'Recv-Q', 'Send-Q', 'Local Address:Port', 'Peer Address:Port', flags.has('p') ? 'Process' : ''];
+    const all = flags.has('H') ? cols : [head, ...cols];
+    const width = head.map((_, i) => Math.max(...all.map((r) => r[i].length)));
+    return all.map((r) => r.map((v, i) => (i === 2 || i === 3 ? v.padStart(width[i]) : v.padEnd(width[i])))
+        .filter((_, i) => netid || i > 0).join(' ').trimEnd()).map(esc);
 }
 
 // ---------- DevOps ----------
@@ -807,6 +893,11 @@ Object.assign(COMMANDS, {
     ifconfig: { group: 'Hidden', usage: 'ifconfig', desc: 'deprecated', run: () => {
         state.status = 127;
         print(c('err', 'nsh: command not found: ifconfig') + c('dim', " — net-tools is deprecated on Arch, try 'ip a'"));
+    } },
+    ss: { group: 'Network', usage: 'ss [-tulnpa | -s]', desc: 'another utility to investigate sockets (try: ss -tulnp)', run: cmdSs },
+    netstat: { group: 'Hidden', usage: 'netstat', desc: 'deprecated', run: () => {
+        state.status = 127;
+        print(c('err', 'nsh: command not found: netstat') + c('dim', " — net-tools is deprecated on Arch, try 'ss -tulnp'"));
     } },
     ping: { group: 'Network', usage: 'ping [-c N] HOST', desc: 'send ICMP ECHO_REQUEST to network hosts (Ctrl+C stops)', run: cmdPing },
     curl: { group: 'Network', usage: 'curl [-I] URL', desc: 'transfer a URL — real requests, e.g. curl wttr.in/Kathmandu', run: cmdCurl },

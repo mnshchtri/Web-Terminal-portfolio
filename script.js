@@ -55,6 +55,8 @@ const USERS = {
     root: { uid: 0, home: '/root', groups: '0(root)' },
     neox: { uid: 1000, home: HOME, groups: '1000(neox),998(wheel),969(docker)' },
     visitor: { uid: 1001, home: HOME, groups: '1001(visitor),100(users)' },
+    // A system account: no login shell, but `sudo -u postgres psql` runs as it.
+    postgres: { uid: 970, home: '/var/lib/postgres', groups: '970(postgres)', nologin: true },
 };
 
 const BANNER = String.raw`
@@ -107,7 +109,7 @@ const newSession = () => ({
     env: {
         USER: GUEST, LOGNAME: GUEST, HOME, HOSTNAME: HOST, SHELL: '/bin/nsh',
         TERM: 'xterm-ghostty', LANG: 'en_US.UTF-8', EDITOR: 'nvim',
-        PATH: '/usr/local/bin:/usr/bin:/bin', PWD: HOME, OLDPWD: HOME,
+        PATH: '/usr/local/bin:/usr/bin:/bin', PWD: HOME, OLDPWD: HOME, PGDATABASE: 'portfolio',
     },
     aliases: {
         ll: 'ls -la',
@@ -880,19 +882,27 @@ async function cmdSudo({ args, stdin, piped }) {
         if (!(await authenticate(`[sudo] password for ${state.user}: `))) return;
         state.sudoUntil = Date.now() + 5 * 60 * 1000;
     }
-    const [first, ...rest] = args;
+    let [first, ...rest] = args;
     if (first === '-l') return [`User ${esc(state.user)} may run the following commands on ${HOST}:`, '    (ALL : ALL) ALL'];
-    journal('sudo', `${state.user} : TTY=pts/0 ; PWD=${state.cwd} ; USER=root ; COMMAND=${args.join(' ')}`);
+    let target = 'root';
+    if (first === '-u') {
+        target = rest.shift();
+        if (!USERS[target]) return err(`sudo: unknown user ${target ?? ''}`);
+        if (!rest.length) return err('usage: sudo -u user command [arg ...]');
+        [first, ...rest] = args = rest;
+    }
+    journal('sudo', `${state.user} : TTY=pts/0 ; PWD=${state.cwd} ; USER=${target} ; COMMAND=${args.join(' ')}`);
     if (['-i', '-s', 'su', 'bash', 'sh', 'nsh'].includes(first) && rest.every((a) => a === '-')) {
-        pushUser('root', first !== '-s');
+        if (USERS[target].nologin) return print('This account is currently not available.');
+        pushUser(target, first !== '-s');
         return;
     }
     const prev = state.user;
-    setUser('root');
+    setUser(target);
     try {
         return await exec(args, stdin, piped);
     } finally {
-        if (state.user === 'root') setUser(prev);
+        if (state.user === target) setUser(prev);
     }
 }
 
@@ -911,6 +921,7 @@ async function cmdSu({ args }) {
         }
     }
     journal('su', `(to ${target}) ${state.user} on pts/0`);
+    if (USERS[target].nologin) return print('This account is currently not available.');
     pushUser(target, login);
 }
 
@@ -1066,7 +1077,7 @@ const COMMANDS = {
     hostname: { group: 'System', usage: 'hostname', desc: 'show the system host name', run: () => [HOST] },
     uname: { group: 'System', usage: 'uname [-a]', desc: 'print system information', run: ({ args }) => [args.includes('-a') ? `Linux ${HOST} ${KERNEL} #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux` : args.includes('-r') ? KERNEL : 'Linux'] },
     date: { group: 'System', usage: 'date', desc: 'print the system date and time', run: () => [fmtDate(new Date())] },
-    sudo: { group: 'System', usage: 'sudo [-i | -l] COMMAND', desc: 'execute a command as root', run: cmdSudo },
+    sudo: { group: 'System', usage: 'sudo [-i | -l | -u USER] COMMAND', desc: 'execute a command as root', run: cmdSudo },
     su: { group: 'System', usage: 'su [-] [USER]', desc: 'run a shell as another user', run: cmdSu },
     exit: { group: 'System', usage: 'exit', desc: 'leave the current shell', builtin: true, run: cmdExit },
     logout: { group: 'Hidden', usage: 'logout', desc: 'log out of the shell', builtin: true, run: cmdExit },

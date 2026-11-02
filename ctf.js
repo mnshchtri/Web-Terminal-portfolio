@@ -219,11 +219,14 @@ UNITS.knockd = { desc: 'Port-knock server', pid: 488, bin: '/usr/bin/knockd -c /
 UNITS.kafka = { desc: 'Apache Kafka broker (KRaft)', pid: 610, bin: '/usr/lib/jvm/java-21-openjdk/bin/java -Xmx1G kafka.Kafka /etc/kafka/server.properties', active: true };
 SYS.procs.push(
     { pid: 488, user: 'root', base: 0, cpu: 0, mem: 0.1, cmd: '/usr/bin/knockd -c /etc/knockd.conf', time: 3 },
+    { pid: 489, user: 'root', base: 0, cpu: 0, mem: 0.1, cmd: '/usr/local/bin/neox-debug --port 31337', time: 1 },
     { pid: 610, user: 'kafka', base: 1.2, cpu: 1.2, mem: 6.4, cmd: '/usr/lib/jvm/java-21-openjdk/bin/java -Xmx1G kafka.Kafka /etc/kafka/server.properties', time: 812 },
     // The implant renamed itself to look like a kernel thread, but kernel threads show in [brackets].
     { pid: 2323, user: 'root', base: 0.1, cpu: 0.1, mem: 0.1, cmd: 'kworker/u8:2', time: 41 },
 );
 SYS.procs.sort((a, b) => a.pid - b.pid);
+// The debug shell always listens; it's the firewall that hides it until the knock.
+SOCKETS.push({ proto: 'tcp', st: 'LISTEN', local: '0.0.0.0:31337', peer: '0.0.0.0:*', pid: 489, name: 'neox-debug', fd: 3 });
 
 const rot13 = (s) => s.replace(/[a-z]/gi, (ch) => String.fromCharCode((ch <= 'Z' ? 65 : 97) + ((ch.charCodeAt(0) - (ch <= 'Z' ? 65 : 97) + 13) % 26)));
 
