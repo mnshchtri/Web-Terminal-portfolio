@@ -56,7 +56,7 @@ const USERS = {
     neox: { uid: 1000, home: HOME, groups: '1000(neox),998(wheel),969(docker)' },
     visitor: { uid: 1001, home: HOME, groups: '1001(visitor),100(users)' },
     // A system account: no login shell, but `sudo -u postgres psql` runs as it.
-    postgres: { uid: 970, home: '/var/lib/postgres', groups: '970(postgres)', nologin: true },
+    postgres: { uid: 970, home: '/var/lib/postgres', groups: '970(postgres)', nologin: true, locked: true },
 };
 
 const BANNER = String.raw`
@@ -908,20 +908,23 @@ async function cmdSudo({ args, stdin, piped }) {
 
 async function cmdSu({ args }) {
     const login = args.some((a) => ['-', '-l', '--login'].includes(a));
-    const target = args.find((a) => !a.startsWith('-')) || 'root';
+    // -s SHELL overrides the account's shell, which is how root gets a shell as a nologin account.
+    const sIdx = args.findIndex((a) => a === '-s' || a === '--shell');
+    const shell = sIdx >= 0 ? args[sIdx + 1] : null;
+    const target = args.find((a, i) => !a.startsWith('-') && (sIdx < 0 || i !== sIdx + 1)) || 'root';
     if (!USERS[target]) return err(`su: user ${target} does not exist or the user entry does not contain all the required fields`);
     if (!isRoot() && target !== GUEST) {
         const pw = await ask('Password: ', true);
         if (state.abort) return;
         await sleep(800);
-        // root's account is locked (see /etc/shadow), so only neox's password ever works here.
-        if (target === 'root' || !isNeoxPassword(pw)) {
+        // root's and postgres's accounts are locked (see /etc/shadow), so only neox's password ever works here.
+        if (target === 'root' || USERS[target].locked || !isNeoxPassword(pw)) {
             journal('su', `pam_unix(su:auth): authentication failure; logname=${state.user} tty=pts/0 user=${target}`);
             return err('su: Authentication failure');
         }
     }
     journal('su', `(to ${target}) ${state.user} on pts/0`);
-    if (USERS[target].nologin) return print('This account is currently not available.');
+    if (USERS[target].nologin && !shell) return print('This account is currently not available.');
     pushUser(target, login);
 }
 

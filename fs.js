@@ -63,6 +63,7 @@ visitor:x:1001:
 root:!*:20380::::::
 neox:$6$rounds=656000$Lynx$wQ8vR1kN3mZ.7yT2pX9cJ5hL0aG4sD6fB8eK1nU3iO7qW2rE5tY9uP0zA3xC6vB:20380:0:99999:7:::
 visitor::20380:0:99999:7:::
+postgres:!*:20380::::::
 `), '-rw-------'),
         sudoers: secret(file(`
 ## Allow root and members of group wheel to execute any command
