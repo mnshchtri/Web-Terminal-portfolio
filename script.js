@@ -1676,6 +1676,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     FS.children.usr.children.bin = FS.children.bin;
 
     bindShell(createShell(document.getElementById('tty')));
+    // First visit: the trailer (intro.js) plays before the boot.
+    if (wantsIntro()) await playIntro();
     // Résumé links (#resume) skip the boot animation: recruiters shouldn't have to wait.
     if (!sessionStorage.getItem('nsh_booted') && !/^#(resume|cv)$/i.test(location.hash)) {
         await boot();
