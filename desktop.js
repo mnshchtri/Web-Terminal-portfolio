@@ -613,7 +613,7 @@ function showScreensaver() {
     }, 40);
 }
 
-// yozakura's screensaver: an ensō brushed in one stroke, with InfraEye's motto in vertical kanji.
+// yozakura's screensaver: an ensō brushed in one stroke, with 一期一会 in vertical kanji.
 function showEnso() {
     saverEl.innerHTML = `<div class="enso">
         <svg viewBox="0 0 400 400" aria-hidden="true">
@@ -623,8 +623,8 @@ function showEnso() {
                 <path class="enso-stroke dry" pathLength="1" d="M256 52A158 158 0 1 1 184 43" stroke-width="3"/>
             </g>
         </svg>
-        <p class="enso-jp" lang="ja">見えないものを観る</p>
-        <p class="enso-en">InfraEye, observing the unseen</p>
+        <p class="enso-jp" lang="ja">一期一会</p>
+        <p class="enso-en"><span lang="ja-Latn">ichi-go ichi-e</span>: this moment comes only once</p>
     </div>`;
 }
 
