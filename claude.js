@@ -421,6 +421,7 @@ const CC_INTENTS = [
         await ccSay('Want me to put it on? (Alt+M works too.)');
         cc.offer = () => ccOpenApp('music');
     }],
+    [/trailer|video|film|movie/, () => ccSay("There's a one-minute trailer of this box: `trailer` (or `mpv`, or open ~/Videos in Files). Space pauses, f goes fullscreen. It shows the CTF board but gives nothing away.")],
     [/wallpaper|background/, () => ccSay("Alt+Shift+Space opens the background switcher: 31 wallpapers from Neox's own themes plus six drawn for the yozakura theme. Alt+Ctrl+Space jumps to the next one (in yozakura it cycles the night-sakura set), or `wallpaper list` from here.")],
     [/themes?|colou?rs?|dark mode|light mode/, async () => {
         await ccBash('theme list');

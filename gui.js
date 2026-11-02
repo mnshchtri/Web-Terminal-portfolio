@@ -1,7 +1,7 @@
 'use strict';
 
-// Graphical apps for the desktop: Chromium, Files (Nautilus), Image Viewer (imv), Text Editor,
-// Neox Music and the background switcher. They all run as the guest user.
+// Graphical apps for the desktop: Chromium, Files (Nautilus), Image Viewer (imv), the trailer (mpv),
+// Text Editor, Neox Music and the background switcher. They all run as the guest user.
 
 const guestSession = newSession();
 
@@ -32,6 +32,7 @@ const G = {
     pic: GI('<rect x="3" y="4" width="18" height="16" rx="1"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/>', 'ficon pic'),
     link: GI('<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>', 'ficon lnk'),
     lock: GI('<rect x="5" y="11" width="14" height="10" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>', 'ficon locked'),
+    film: GI('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4-2.5z"/>', 'ficon film'),
     sad: GI('<circle cx="12" cy="12" r="9"/><path d="M8 16c2-2 6-2 8 0"/><path d="M9 9h.01"/><path d="M15 9h.01"/>', 'sad'),
 };
 
@@ -64,6 +65,18 @@ getNode(HOME).children.Pictures = {
             children: Object.fromEntries(WALLPAPERS.map((name) => [`${name}.webp`, {
                 type: 'file', image: wallpaperUrl(name), content: 'RIFF\0\0\0\0WEBPVP8 \0\0\0\0',
             }])),
+        },
+    },
+};
+
+// The trailer lives in ~/Videos, so Files, xdg-open and mpv all find it.
+const TRAILER = `${HOME}/Videos/neoxos-trailer.mp4`;
+getNode(HOME).children.Videos = {
+    type: 'dir',
+    children: {
+        'neoxos-trailer.mp4': {
+            type: 'file', video: 'assets/video/neoxos-trailer.mp4', poster: 'assets/video/neoxos-trailer.jpg',
+            content: '\0\0\0 ftypisom\0\0\x02\0isomiso2avc1mp41',
         },
     },
 };
@@ -469,6 +482,7 @@ function fileIcon(node, abs) {
     if (node.type === 'dir') return G.folder;
     if (node.type === 'link') return G.link;
     if (node.image) return `<img class="fthumb" src="${node.image.replace('wallpapers/', 'wallpapers/thumbs/')}" alt="" loading="lazy">`;
+    if (node.video) return G.film;
     if (node.exe) return G.exe;
     return G.file;
 }
@@ -479,6 +493,7 @@ function openPath(abs) {
     if (node.type === 'dir') return openApp(filesApp(abs));
     if (node.type === 'link') return openApp(browserApp(node.target));
     if (node.image) return openApp(imageApp(abs));
+    if (node.video) return openApp(videoApp(abs));
     if (node.bin) return notify('Cannot open file', `“${basename(abs)}” is a program — run it from a terminal.`);
     return openApp(textApp(abs));
 }
@@ -685,6 +700,59 @@ function imageApp(abs) {
     };
 }
 
+// ---------- mpv: the NeoxOS trailer ----------
+
+// Nothing downloads until the window opens, and closing it stops the stream.
+function videoApp(abs = TRAILER) {
+    const node = getNode(abs);
+    let video;
+    let win;
+    return {
+        cls: 'mpv',
+        title: () => `${basename(abs)} - mpv`,
+        mount(el, w) {
+            win = w;
+            // A film wants the whole desktop: open maximised with the bar kept (Alt+Shift+F toggles it).
+            win.full = 'max';
+            el.innerHTML = `<video src="${node.video}" poster="${node.poster || ''}" controls autoplay playsinline preload="metadata"
+                aria-label="NeoxOS trailer"></video>`;
+            video = el.querySelector('video');
+            el.tabIndex = 0;
+            // mpv's keys: space pause, ←/→ seek 5 s, m mute, f fullscreen.
+            el.addEventListener('keydown', (e) => {
+                if (e.altKey || e.ctrlKey || e.metaKey) return;
+                const keys = {
+                    ' ': () => (video.paused ? video.play() : video.pause()),
+                    ArrowLeft: () => { video.currentTime -= 5; },
+                    ArrowRight: () => { video.currentTime += 5; },
+                    m: () => { video.muted = !video.muted; },
+                    f: () => (document.fullscreenElement ? document.exitFullscreen() : video.requestFullscreen?.()),
+                };
+                if (!keys[e.key]) return;
+                e.preventDefault();
+                keys[e.key]();
+            });
+        },
+        focus() {
+            win.el.focus({ preventScroll: true });
+        },
+        cleanup() {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+        },
+    };
+}
+
+function cmdMpv({ name, args }) {
+    const abs = args[0] ? normalize(args[0]) : TRAILER;
+    const node = getNode(abs);
+    if (!node) return err(`${name}: ${args[0]}: No such file or directory`);
+    if (!node.video) return err(`${name}: ${args[0]}: not a video file`);
+    openApp(videoApp(abs), { fromCommand: true });
+    return [c('dim', ` (+) Video --vid=1 (*) (h264 1920x1080 30fps)`), c('dim', ` (+) Audio --aid=1 (*) (aac 2ch 48000Hz)`)];
+}
+
 // ---------- Neox Music ----------
 
 function musicApp() {
@@ -710,6 +778,7 @@ LAUNCH.splice(1, 0,
     { name: 'Chromium', hint: 'Alt+B', action: () => openApp(browserApp()) },
     { name: 'Files', hint: 'Alt+E', action: () => openApp(filesApp()) },
     { name: 'Neox Music', hint: 'Alt+M', action: () => openApp(musicApp()) },
+    { name: 'NeoxOS Trailer', hint: 'trailer', action: () => openApp(videoApp()) },
     { name: 'Image Viewer', hint: 'wallpapers', action: () => openApp(imageApp(`${WALLPAPER_DIR}/${currentWallpaper()}.webp`)) },
     { name: 'Background Switcher', hint: 'Alt+Shift+Space', action: openWallpaperSwitcher },
     { name: 'Next Background', hint: 'Alt+Ctrl+Space', action: () => stepWallpaper(1) },
@@ -778,7 +847,7 @@ function cmdTextEditor({ name, args }) {
     if (!args.length) return err(`${name}: missing file operand`);
     const abs = normalize(args[0]);
     const node = getNode(abs);
-    if (node?.type !== 'file' || node.image || node.bin) return err(`${name}: ${args[0]}: not a text file`);
+    if (node?.type !== 'file' || node.image || node.video || node.bin) return err(`${name}: ${args[0]}: not a text file`);
     openApp(textApp(abs), { fromCommand: true });
 }
 
@@ -792,6 +861,7 @@ function cmdXdgOpen(ctx) {
     if (asGuest(() => isForbidden(abs))) return err(`xdg-open: ${target}: Permission denied`);
     if (node.type === 'dir') return void openApp(filesApp(abs), { fromCommand: true });
     if (node.image) return void openApp(imageApp(abs), { fromCommand: true });
+    if (node.video) return void openApp(videoApp(abs), { fromCommand: true });
     if (node.bin) return err(`xdg-open: no application registered for '${target}'`);
     openApp(textApp(abs), { fromCommand: true });
 }
@@ -807,6 +877,8 @@ Object.assign(COMMANDS, {
     'gnome-text-editor': { group: 'Desktop', usage: 'gnome-text-editor FILE', desc: 'graphical text editor', run: cmdTextEditor },
     music: { group: 'Desktop', usage: 'music', desc: 'play Neox Music (YouTube @lynthrax)', run: () => void openApp(musicApp(), { fromCommand: true }) },
     spotify: { group: 'Hidden', usage: 'spotify', desc: 'play Neox Music', run: () => void openApp(musicApp(), { fromCommand: true }) },
+    trailer: { group: 'Desktop', usage: 'trailer', desc: 'watch the one-minute NeoxOS trailer', run: (ctx) => cmdMpv({ ...ctx, args: [] }) },
+    mpv: { group: 'Desktop', usage: 'mpv [FILE]', desc: 'play a video (~/Videos/neoxos-trailer.mp4 by default)', run: cmdMpv },
     wallpaper: { group: 'Desktop', usage: 'wallpaper [list | next | prev | random | NAME]', desc: 'change the desktop background (saved across visits)', run: cmdWallpaper },
     'omarchy-theme-bg-next': { group: 'Hidden', usage: 'omarchy-theme-bg-next', desc: 'cycle to the next background', run: () => cmdWallpaper({ args: ['next'] }) },
     'omarchy-theme-bg-switcher': { group: 'Hidden', usage: 'omarchy-theme-bg-switcher', desc: 'open the background switcher', run: () => void openWallpaperSwitcher() },

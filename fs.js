@@ -106,7 +106,7 @@ It's a desktop too (Alt stands in for Super):
   Alt+Shift+N VS Code (this site's own source) · Alt+Shift+O Obsidian (my notes)
   Alt+G Neox Arcade: 7 original games (try fretwork or night-shift) · bruteforce
   Alt+Space launcher · Alt+F fullscreen · Alt+Shift+Space backgrounds · Alt+Ctrl+Space next one
-  wallpaper list · chromium wiki.archlinux.org · nautilus ~/projects
+  wallpaper list · trailer · chromium wiki.archlinux.org · nautilus ~/projects
 
 It's also a CTF: seven flags are hidden on this box (web, network, cloud,
 kafka, forensics, privesc...) plus secret quests nobody will tell you about.

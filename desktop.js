@@ -456,6 +456,7 @@ const LAUNCH_ICONS = [
     [/chromium/i, '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'],
     [/^files/i, '<path d="M3 6h6l2 2h10v11H3z"/>'],
     [/music/i, '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>'],
+    [/trailer/i, '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4-2.5z"/>'],
     [/image|background/i, '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'],
     [/claude/i, '<path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/>'],
     [/code|neovim/i, '<path d="m8 8-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/>'],
@@ -943,7 +944,7 @@ function startDesktop() {
     // Visitors arriving on a résumé link came for the CV, not the tour.
     if (!sessionStorage.getItem('nsh_welcomed') && !/^#(resume|cv)$/i.test(location.hash)) {
         sessionStorage.setItem('nsh_welcomed', '1');
-        setTimeout(() => notify('Welcome to NeoxOS', 'Looking for my CV? Click “Hire me” in the top bar. Otherwise: Alt+Enter opens a terminal, Alt+Space the launcher.', 9000), 600);
+        setTimeout(() => notify('Welcome to NeoxOS', 'Looking for my CV? Click “Hire me” in the top bar. Otherwise: Alt+Enter opens a terminal, Alt+Space the launcher, and typing trailer plays a one-minute tour.', 9000), 600);
     }
     desktopReadyHooks.forEach((hook) => hook());
 }

@@ -25,7 +25,7 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `obsidian.js` — Obsidian with the public **Neox Vault** (`~/Documents/Neox Vault`): wikilinks, backlinks, tags, search and the graph view. The notes are written in this file.
 - `analytics.js` — visitor analytics via [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/): cookie-free page views, referrers, countries, devices and page-load speed. Off until `CLOUDFLARE_ANALYTICS_TOKEN` is set, and off on localhost, with Do Not Track / Global Privacy Control, or after `analytics off`. Visitors can run `privacy` to see what's counted.
 - `assets/og.jpg` — the link-preview image (1200×630) used by LinkedIn, X, WhatsApp and Slack.
-- `assets/` — `wallpapers/` (the 31 backgrounds from my Omarchy themes, six `yozakura*.webp` scenes drawn for this site (night sakura, ensō, koi pond, lantern alley, pagoda, senbon torii), plus thumbnails) and `wallpaper.jpg` (terminal background).
+- `assets/` — `video/` (the one-minute trailer, played by `trailer`/`mpv` or from ~/Videos; music credits on its end card), `wallpapers/` (the 31 backgrounds from my Omarchy themes, six `yozakura*.webp` scenes drawn for this site (night sakura, ensō, koi pond, lantern alley, pagoda, senbon torii), plus thumbnails) and `wallpaper.jpg` (terminal background).
 
 ## Keybindings
 Alt stands in for Super, which the OS or browser keeps for itself.

@@ -696,6 +696,9 @@ a:hover { text-decoration-style: solid; }
 /* Image Viewer */
 .imv { background: #000 !important; }
 
+.mpv { background: #000 !important; }
+.mpv video { flex: 1; min-height: 0; width: 100%; background: #000; object-fit: contain; outline: none; }
+
 .imv-stage {
     display: grid;
     place-items: center;
