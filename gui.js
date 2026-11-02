@@ -41,8 +41,12 @@ const WALLPAPERS = [
     'anime-girl', 'anon', 'apple', 'arch', 'arch-nord', 'enso', 'evangelion', 'fantasy', 'ghibli',
     'green', 'guitar', 'guitarvinci', 'infraeye-1', 'infraeye-2', 'infraeye-3', 'infraeye-4', 'jungle',
     'jungle-ghibli', 'lake', 'nature', 'nature-anime', 'nixos', 'reddevil', 'roads', 'skull', 'solitude',
-    'torii', 'tree', 'win-palette', 'window', 'windows', 'yozakura',
+    'torii', 'tree', 'win-palette', 'window', 'windows', 'yozakura', 'yozakura-enso', 'yozakura-koi',
+    'yozakura-lanterns', 'yozakura-pagoda', 'yozakura-senbon',
 ];
+// A theme's own backgrounds, drawn for this site. While it's active, next/prev cycle through these,
+// like `omarchy theme bg next`; the switcher still offers every background.
+const THEME_BACKGROUNDS = { yozakura: WALLPAPERS.filter((n) => n.startsWith('yozakura')) };
 const DEFAULT_WALLPAPER = 'yozakura';
 const WALLPAPER_DIR = `${HOME}/Pictures/Wallpapers`;
 const wallpaperUrl = (name) => `assets/wallpapers/${name}.webp`;
@@ -75,8 +79,10 @@ function setWallpaper(name) {
 }
 
 function stepWallpaper(step) {
-    const i = WALLPAPERS.indexOf(currentWallpaper());
-    const next = WALLPAPERS[(i + step + WALLPAPERS.length) % WALLPAPERS.length];
+    const own = THEME_BACKGROUNDS[currentTheme()];
+    const set = own?.includes(currentWallpaper()) ? own : WALLPAPERS;
+    const i = set.indexOf(currentWallpaper());
+    const next = set[(i + step + set.length) % set.length];
     setWallpaper(next);
     return next;
 }

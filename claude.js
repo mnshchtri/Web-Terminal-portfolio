@@ -421,7 +421,7 @@ const CC_INTENTS = [
         await ccSay('Want me to put it on? (Alt+M works too.)');
         cc.offer = () => ccOpenApp('music');
     }],
-    [/wallpaper|background/, () => ccSay("Alt+Shift+Space opens the background switcher: 31 wallpapers from Neox's own themes. Alt+Ctrl+Space jumps to the next one, or `wallpaper list` from here.")],
+    [/wallpaper|background/, () => ccSay("Alt+Shift+Space opens the background switcher: 31 wallpapers from Neox's own themes plus six drawn for the yozakura theme. Alt+Ctrl+Space jumps to the next one (in yozakura it cycles the night-sakura set), or `wallpaper list` from here.")],
     [/themes?|colou?rs?|dark mode|light mode/, async () => {
         await ccBash('theme list');
         await ccSay('`theme NAME` switches, `theme next` cycles, and it remembers your choice next visit.');
@@ -619,7 +619,7 @@ const CC_MORE_INTENTS = [
     [/(tell|show) me something (interesting|cool|fun)|surprise me|random fact|fun fact/, () => ccSay(pick([
         'The arcade\'s Fretwork game plays a song composed for this site, *Kathmandu Overdrive*, synthesised live in your browser. Alt+G.',
         'Every failed command plays the same "fahhh" Neox hears in their own zsh. Try typing `lss`.',
-        'There\'s a skull wallpaper behind every terminal, and 31 more backgrounds on Alt+Shift+Space, all from Neox\'s own themes.',
+        'There\'s a skull wallpaper behind every terminal, and 37 more backgrounds on Alt+Shift+Space: 31 from Neox\'s own themes, six drawn for yozakura.',
         'Chromium on this desktop can browse a web server running *inside* this box: try `http://localhost` in it, with Ctrl+U for the source.',
         'Kathmandu runs 5h45m ahead of UTC. Yes, 45.',
     ]))],
