@@ -13,7 +13,7 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `apps.js` — full-screen programs: `less`/`man`, `htop`/`top`, `vim`, `nano`, `cmatrix`, `sl`.
 - `sys.js` — system and network tools (`systemctl`, `journalctl`, `ping`, `curl`, `nmap`, `ss`, `pacman`…), live GitHub (`gh`, `git clone`/`log`) and themes.
 - `desktop.js` — the desktop: dwindle tiling window manager, workspaces 1–9, top bar, launcher, notifications, screensaver, `hyprctl`/`ghostty`/`notify-send`.
-- `style.css` — layout and the colour themes (`win-palette` is my current Omarchy theme).
+- `style.css` — layout and the colour themes. `yozakura` (night sakura: kanji workspaces, torii launcher, drifting petals, an ensō screensaver) is the default; `win-palette` is my current Omarchy theme.
 - `gui.js` — graphical apps: Chromium, Files, Text Editor, Image Viewer (imv), Neox Music, and the background switcher.
 - `vscode.js` — VS Code: explorer, tabs, syntax highlighting, search, source control with live commits, quick open (Ctrl+P) and an integrated `nsh` terminal (Ctrl+\`). Opens this site's own source in `~/code/Web-Terminal-portfolio`.
 - `resume.js` — the résumé window, its print/PDF layout, the Hire me button and the `#resume` link. Its `RESUME` data follows my CV (without my phone number); the plain-HTML summary at the top of `index.html` is for search engines, screen readers and no-JavaScript visitors, so keep both in step.
@@ -25,7 +25,7 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `obsidian.js` — Obsidian with the public **Neox Vault** (`~/Documents/Neox Vault`): wikilinks, backlinks, tags, search and the graph view. The notes are written in this file.
 - `analytics.js` — visitor analytics via [Cloudflare Web Analytics](https://developers.cloudflare.com/web-analytics/): cookie-free page views, referrers, countries, devices and page-load speed. Off until `CLOUDFLARE_ANALYTICS_TOKEN` is set, and off on localhost, with Do Not Track / Global Privacy Control, or after `analytics off`. Visitors can run `privacy` to see what's counted.
 - `assets/og.jpg` — the link-preview image (1200×630) used by LinkedIn, X, WhatsApp and Slack.
-- `assets/` — `wallpapers/` (the 31 backgrounds from my Omarchy themes, plus thumbnails) and `wallpaper.jpg` (terminal background).
+- `assets/` — `wallpapers/` (the 31 backgrounds from my Omarchy themes, `yozakura.webp` drawn for this site, plus thumbnails) and `wallpaper.jpg` (terminal background).
 
 ## Keybindings
 Alt stands in for Super, which the OS or browser keeps for itself.

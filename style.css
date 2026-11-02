@@ -1,5 +1,11 @@
-/* Themes — switch with `theme NAME`. win-palette is neox's current Omarchy theme and the default. */
+/* Themes — switch with `theme NAME`. yozakura (night sakura) is the default; win-palette is neox's
+   current Omarchy theme. */
 :root,
+[data-theme="yozakura"] {
+    --bg: #161a2b; --fg: #ece4d4; --dim: #6e7694; --black: #10131f;
+    --red: #e0604c; --green: #a3b97f; --yellow: #d8ad5f; --blue: #8aa4d6;
+    --magenta: #eba6bb; --cyan: #88bdb7; --sel: #3c3456; --accent: #eba6bb;
+}
 [data-theme="win-palette"] {
     --bg: #0a0a0a; --fg: #f8f8f8; --dim: #545454; --black: #101010;
     --red: #b48380; --green: #c2dab7; --yellow: #9f8d6b; --blue: #cdd4dd;
@@ -65,7 +71,7 @@ html, body {
 body {
     display: flex;
     flex-direction: column;
-    background: #000 var(--desktop-wall, url('assets/wallpapers/win-palette.webp')) center / cover no-repeat;
+    background: #000 var(--desktop-wall, url('assets/wallpapers/yozakura.webp')) center / cover no-repeat;
 }
 
 ::selection {
@@ -136,6 +142,8 @@ button {
     width: 15px;
     height: 15px;
 }
+
+.logo-torii, .ws-k, .bar-jday { display: none; }
 
 .workspaces {
     display: flex;
@@ -1458,7 +1466,9 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
     html, body { font-size: 13px; }
     .user-input { font-size: 16px; } /* stops iOS zooming on focus */
     .win { border-width: 0; }
-    #bar { gap: 10px; }
+    /* The centre modules are all hidden here, so give its column to the right side (Hire me was clipped). */
+    #bar { grid-template-columns: auto 1fr; gap: 10px; }
+    .bar-center { display: none !important; }
     .bar-wclock, .bar-kb, .bar-cava, .bar-weather, .ws:not(.active):not(.used),
     #bar [data-cmd="theme next"], #bar [data-cmd^="systemctl"], #bar [data-cmd="ip a"], .bar-bg, .bar-audio, .bar-clock { display: none; }
     .bar-right { flex-shrink: 0; }
@@ -1569,3 +1579,189 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
 .cc-mode-auto { color: #e5c07b; }
 .cc-mode-plan { color: #48b0a0; }
 .cc-mode-edits { color: #b18cf5; }
+
+/* ---------- yozakura: the night-sakura rice ----------
+   Shu (vermilion) is kept for seals: the active workspace, the torii, notification edges.
+   Sakura pink is the accent; kin (gold) only finishes the focused border. */
+
+[data-theme="yozakura"] {
+    --shu: #d6503c;
+    --kin: #d8ad5f;
+    --washi-line: rgba(236, 228, 212, 0.1);
+    --glass: color-mix(in srgb, var(--bg) 72%, transparent);
+    --terminal-bg: color-mix(in srgb, var(--bg) 80%, transparent);
+    --inactive-border: var(--washi-line);
+    --kanji: 'Shippori Mincho', 'Noto Serif CJK JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+}
+
+#petals {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+[data-theme="yozakura"] #bar,
+[data-theme="yozakura"] #desktop { position: relative; z-index: 1; }
+
+/* The bar floats as a glass strip, lined up with the window gaps. */
+[data-theme="yozakura"] #bar {
+    height: 30px;
+    margin: 8px 10px 0;
+    padding: 0 8px 0 10px;
+    border: 1px solid var(--washi-line);
+    border-radius: 10px;
+    background: var(--glass);
+    backdrop-filter: blur(14px) saturate(1.3);
+    text-shadow: none;
+}
+
+[data-theme="yozakura"] .logo-omarchy { display: none; }
+[data-theme="yozakura"] .logo-torii { display: block; color: var(--shu); }
+[data-theme="yozakura"] .bar-logo .logo-torii { width: 17px; height: 17px; }
+
+[data-theme="yozakura"] .workspaces { gap: 3px; }
+[data-theme="yozakura"] .ws-n { display: none; }
+[data-theme="yozakura"] .ws-k { display: inline; }
+[data-theme="yozakura"] .ws {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    min-width: 0;
+    border-radius: 5px;
+    font: 600 13px/1 var(--kanji);
+    transition: background-color 0.2s, color 0.2s;
+}
+[data-theme="yozakura"] .ws.used { color: var(--magenta); }
+/* The active workspace is stamped like a hanko seal. */
+[data-theme="yozakura"] .ws.active { background: var(--shu); color: var(--fg); }
+[data-theme="yozakura"] #bar .ws:hover:not(.active) { background: var(--washi-line); }
+
+[data-theme="yozakura"] .bar-jday {
+    display: inline;
+    margin-left: -4px;
+    color: var(--magenta);
+    font: 600 12.5px var(--kanji);
+}
+
+[data-theme="yozakura"] .bar-cava { color: var(--magenta); opacity: 0.8; }
+
+/* Windows: rounded, frosted, with a sakura-to-gold border on the focused one (Hyprland's gradient
+   col.active_border). The ring is drawn inside the box because .win clips its border area. */
+[data-theme="yozakura"] .win {
+    border-width: 0;
+    border-radius: 10px;
+    box-shadow: 0 20px 50px -18px rgba(4, 5, 14, 0.85);
+    opacity: 1;
+}
+[data-theme="yozakura"] .win:not(.gui) { backdrop-filter: blur(18px) saturate(1.25); }
+[data-theme="yozakura"] .win::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    padding: 2px;
+    border-radius: inherit;
+    background: var(--inactive-border);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    pointer-events: none;
+}
+[data-theme="yozakura"] .win.focused::after { background: linear-gradient(135deg, var(--magenta), var(--shu) 60%, var(--kin)); }
+[data-theme="yozakura"] .win.busy-flash::after { background: var(--red); }
+[data-theme="yozakura"] .win.fs { border-radius: 0; }
+[data-theme="yozakura"] .win.fs::after { display: none; }
+
+[data-theme="yozakura"] .empty-hint {
+    border: 1px solid var(--washi-line);
+    border-radius: 12px;
+    background: var(--glass);
+    backdrop-filter: blur(14px);
+    text-shadow: none;
+    opacity: 1;
+}
+[data-theme="yozakura"] .empty-hint .logo-torii { width: 30px; height: 30px; }
+
+[data-theme="yozakura"] #launcher { background: rgba(8, 9, 20, 0.35); }
+[data-theme="yozakura"] .launcher-box,
+[data-theme="yozakura"] .picker-box {
+    overflow: hidden;
+    border: 1px solid var(--washi-line);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(22px) saturate(1.3);
+    box-shadow: 0 30px 80px -24px rgba(0, 0, 0, 0.85);
+}
+[data-theme="yozakura"] .launcher-input { padding: 14px 18px; border-bottom-color: var(--washi-line); }
+[data-theme="yozakura"] .launcher-list { padding: 6px; }
+[data-theme="yozakura"] .launcher-item { padding: 6px 12px; border-radius: 7px; }
+[data-theme="yozakura"] .launcher-item.sel {
+    background: color-mix(in srgb, var(--magenta) 16%, transparent);
+    box-shadow: inset 3px 0 0 var(--shu);
+    color: var(--fg);
+}
+[data-theme="yozakura"] .launcher-item.sel .dim { color: var(--magenta); opacity: 1; }
+[data-theme="yozakura"] .launcher-item.sel .icon { color: var(--magenta); }
+
+.launcher-item .icon { margin-right: 10px; color: var(--dim); }
+.launcher-item.sel .icon { color: inherit; }
+
+[data-theme="yozakura"] .picker-item { border-radius: 8px; }
+[data-theme="yozakura"] .picker-item img { border-radius: 5px; }
+
+[data-theme="yozakura"] #notifications { top: 48px; right: 10px; }
+[data-theme="yozakura"] .toast {
+    padding: 11px 16px 11px 18px;
+    border: 1px solid var(--washi-line);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg) 84%, transparent);
+    backdrop-filter: blur(18px);
+    box-shadow: inset 3px 0 0 var(--shu), 0 16px 40px -16px rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="yozakura"] .bar-hire { border-color: var(--shu) !important; background: color-mix(in srgb, var(--shu) 22%, transparent) !important; }
+[data-theme="yozakura"] .bar-hire:hover { background: var(--shu) !important; color: var(--fg) !important; }
+
+/* Screensaver: the ensō draws itself once, then rests. */
+[data-theme="yozakura"] #screensaver { background: radial-gradient(circle at 50% 45%, #1d2038, #0b0d18 70%); }
+.enso { display: grid; grid-template-columns: auto auto; align-items: center; gap: 0 clamp(16px, 4vw, 56px); }
+.enso svg { width: min(52vmin, 420px); }
+.enso-stroke { stroke: var(--fg); stroke-dasharray: 1; stroke-dashoffset: 1; animation: enso-draw 2.6s cubic-bezier(0.6, 0.1, 0.3, 1) 0.3s forwards; }
+.enso-stroke.dry { opacity: 0.35; animation-delay: 0.45s; }
+.enso-jp {
+    margin: 0;
+    writing-mode: vertical-rl;
+    color: var(--fg);
+    font: 600 clamp(20px, 3.4vmin, 34px) / 1 var(--kanji);
+    letter-spacing: 0.3em;
+    opacity: 0;
+    animation: enso-fade 1.2s ease 2.4s forwards;
+}
+.enso-en {
+    grid-column: 1 / -1;
+    margin: 28px 0 0;
+    text-align: center;
+    color: var(--dim);
+    letter-spacing: 0.04em;
+    opacity: 0;
+    animation: enso-fade 1.2s ease 2.8s forwards;
+}
+@keyframes enso-draw { to { stroke-dashoffset: 0; } }
+@keyframes enso-fade { to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .enso-stroke { animation: none; stroke-dashoffset: 0; }
+    .enso-jp, .enso-en { animation: none; opacity: 1; }
+    [data-theme="yozakura"] .ws { transition: none; }
+}
+
+@media (max-width: 700px) {
+    [data-theme="yozakura"] #bar { margin: 0; border-width: 0 0 1px; border-radius: 0; }
+    [data-theme="yozakura"] .win { border-radius: 0; }
+    [data-theme="yozakura"] .win::after { display: none; }
+    [data-theme="yozakura"] #notifications { top: 38px; }
+    [data-theme="yozakura"] .bar-jday { display: none; }
+}

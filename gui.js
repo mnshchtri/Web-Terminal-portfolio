@@ -41,9 +41,9 @@ const WALLPAPERS = [
     'anime-girl', 'anon', 'apple', 'arch', 'arch-nord', 'enso', 'evangelion', 'fantasy', 'ghibli',
     'green', 'guitar', 'guitarvinci', 'infraeye-1', 'infraeye-2', 'infraeye-3', 'infraeye-4', 'jungle',
     'jungle-ghibli', 'lake', 'nature', 'nature-anime', 'nixos', 'reddevil', 'roads', 'skull', 'solitude',
-    'torii', 'tree', 'win-palette', 'window', 'windows',
+    'torii', 'tree', 'win-palette', 'window', 'windows', 'yozakura',
 ];
-const DEFAULT_WALLPAPER = 'win-palette';
+const DEFAULT_WALLPAPER = 'yozakura';
 const WALLPAPER_DIR = `${HOME}/Pictures/Wallpapers`;
 const wallpaperUrl = (name) => `assets/wallpapers/${name}.webp`;
 const currentWallpaper = () => {

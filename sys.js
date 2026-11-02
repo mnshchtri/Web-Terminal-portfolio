@@ -68,7 +68,8 @@ FS.children.proc = {
 
 // ---------- themes ----------
 
-const THEMES = ['win-palette', 'tokyo-night', 'catppuccin', 'gruvbox', 'nord', 'everforest', 'rose-pine', 'matrix'];
+const THEMES = ['yozakura', 'win-palette', 'tokyo-night', 'catppuccin', 'gruvbox', 'nord', 'everforest', 'rose-pine', 'matrix'];
+const THEME_WALLPAPERS = { yozakura: 'yozakura', 'win-palette': 'win-palette' };
 const currentTheme = () => (THEMES.includes(document.documentElement.dataset.theme) ? document.documentElement.dataset.theme : THEMES[0]);
 
 function cmdTheme({ args }) {
@@ -80,6 +81,8 @@ function cmdTheme({ args }) {
     if (!THEMES.includes(name)) return err(`theme: unknown theme '${name}' (try: theme list)`);
     document.documentElement.dataset.theme = name;
     localStorage.setItem('nsh_theme', name);
+    // Like omarchy-theme-set, a theme that ships its own background brings it along.
+    if (THEME_WALLPAPERS[name]) setWallpaper(THEME_WALLPAPERS[name]);
     return [`Theme set to ${c('hl', name)}`];
 }
 

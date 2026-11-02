@@ -12,6 +12,7 @@ const notifyEl = document.getElementById('notifications');
 const saverEl = document.getElementById('screensaver');
 
 // Workspace lanes from neox's hyprland.lua.
+const KANJI_NUM = ' 一二三四五六七八九';
 const LANES = ['Development', 'Development', 'Development', 'DevSecOps', 'DevSecOps', 'DevSecOps',
     'Security research', 'Security research', 'Security research'];
 const GAPS_OUT = 10;
@@ -273,6 +274,8 @@ function layout() {
 }
 
 window.addEventListener('resize', layout);
+// Themes can change the bar's height (yozakura floats it), which resizes the desktop without a window resize.
+new ResizeObserver(() => layout()).observe(desktopEl);
 
 // Called by script.js after every command line.
 function afterCommand(session) {
@@ -330,7 +333,10 @@ const ICONS = {
 };
 
 // neox's Omarchy logo, traced from ~/.config/omarchy/branding/about.txt.
-const LOGO_SVG = '<svg viewBox="0 0 54 13" preserveAspectRatio="none" class="logo-svg" aria-hidden="true"><path fill="currentColor" d="M0 0h54v1h-54zM0 1h4v1h-4zM25 1h4v1h-4zM50 1h4v1h-4zM0 2h4v1h-4zM8 2h21v1h-21zM38 2h8v1h-8zM50 2h4v1h-4zM0 3h4v1h-4zM8 3h4v1h-4zM42 3h4v1h-4zM50 3h4v1h-4zM0 4h4v1h-4zM8 4h4v1h-4zM42 4h4v1h-4zM50 4h4v1h-4zM0 5h4v1h-4zM8 5h4v1h-4zM42 5h4v1h-4zM50 5h4v1h-4zM0 6h12v1h-12zM42 6h4v1h-4zM50 6h4v1h-4zM0 7h4v1h-4zM8 7h4v1h-4zM42 7h4v1h-4zM50 7h4v1h-4zM0 8h4v1h-4zM8 8h4v1h-4zM42 8h4v1h-4zM50 8h4v1h-4zM0 9h4v1h-4zM8 9h4v1h-4zM42 9h4v1h-4zM50 9h4v1h-4zM0 10h4v1h-4zM8 10h38v1h-38zM50 10h4v1h-4zM0 11h4v1h-4zM25 11h4v1h-4zM50 11h4v1h-4zM0 12h29v1h-29zM34 12h20v1h-20z"/></svg>';
+const OMARCHY_SVG = '<svg viewBox="0 0 54 13" preserveAspectRatio="none" class="logo-svg logo-omarchy" aria-hidden="true"><path fill="currentColor" d="M0 0h54v1h-54zM0 1h4v1h-4zM25 1h4v1h-4zM50 1h4v1h-4zM0 2h4v1h-4zM8 2h21v1h-21zM38 2h8v1h-8zM50 2h4v1h-4zM0 3h4v1h-4zM8 3h4v1h-4zM42 3h4v1h-4zM50 3h4v1h-4zM0 4h4v1h-4zM8 4h4v1h-4zM42 4h4v1h-4zM50 4h4v1h-4zM0 5h4v1h-4zM8 5h4v1h-4zM42 5h4v1h-4zM50 5h4v1h-4zM0 6h12v1h-12zM42 6h4v1h-4zM50 6h4v1h-4zM0 7h4v1h-4zM8 7h4v1h-4zM42 7h4v1h-4zM50 7h4v1h-4zM0 8h4v1h-4zM8 8h4v1h-4zM42 8h4v1h-4zM50 8h4v1h-4zM0 9h4v1h-4zM8 9h4v1h-4zM42 9h4v1h-4zM50 9h4v1h-4zM0 10h4v1h-4zM8 10h38v1h-38zM50 10h4v1h-4zM0 11h4v1h-4zM25 11h4v1h-4zM50 11h4v1h-4zM0 12h29v1h-29zM34 12h20v1h-20z"/></svg>';
+// The yozakura theme swaps it for a torii (CSS picks which one shows).
+const TORII_SVG = '<svg viewBox="0 0 24 24" class="logo-svg logo-torii" aria-hidden="true"><path fill="currentColor" d="M1 4.2Q12 6.8 23 4.2l-.5 2.6Q12 8.8 1.5 6.8zM3 10h18v2H3zM5 7.6h2.3V22H5zm11.7 0H19V22h-2.3zM10.9 8h2.2v2h-2.2z"/></svg>';
+const LOGO_SVG = OMARCHY_SVG + TORII_SVG;
 
 barEl.innerHTML = `
     <div class="bar-left">
@@ -339,6 +345,7 @@ barEl.innerHTML = `
     </div>
     <div class="bar-center">
         <button class="bar-clock" title="Click to switch format"></button>
+        <span class="bar-jday" aria-hidden="true"></span>
         <span class="bar-wclock" data-label="TYO" data-offset="540"></span>
         <span class="bar-kb">en</span>
         <span class="bar-wclock" data-label="KTM" data-offset="345"></span>
@@ -369,7 +376,7 @@ function renderWorkspaces() {
     const shown = [1, 2, 3, 4, 5, ...[6, 7, 8, 9].filter((n) => used.has(n) || n === wm.active)];
     $bar('.workspaces').innerHTML = shown.map((n) => {
         const cls = n === wm.active ? 'active' : used.has(n) ? 'used' : '';
-        return `<button class="ws ${cls}" data-ws="${n}" title="Workspace ${n} — ${LANES[n - 1]} (Alt+${n})">${n}</button>`;
+        return `<button class="ws ${cls}" data-ws="${n}" title="Workspace ${n} — ${LANES[n - 1]} (Alt+${n})"><span class="ws-n">${n}</span><span class="ws-k">${KANJI_NUM[n]}</span></button>`;
     }).join('');
 }
 
@@ -378,6 +385,7 @@ function updateBar() {
     $bar('.bar-clock').textContent = clockAlt
         ? `${now.getDate()} ${now.toLocaleString('en-US', { month: 'long' })} W${isoWeek(now)} ${now.getFullYear()}`
         : `${now.toLocaleString('en-US', { weekday: 'long' })} ${now.toTimeString().slice(0, 5)}`;
+    $bar('.bar-jday').textContent = `${'日月火水木金土'[now.getDay()]}曜日`;
     barEl.querySelectorAll('.bar-wclock').forEach((el) => {
         const t = new Date(now.getTime() + now.getTimezoneOffset() * 60000 + el.dataset.offset * 60000);
         el.textContent = `${el.dataset.label} ${t.toTimeString().slice(0, 5)}`;
@@ -439,6 +447,36 @@ barEl.addEventListener('click', (e) => {
 
 // ---------- launcher ----------
 
+const LAUNCH_ICONS = [
+    [/^terminal/i, '<path d="m4 17 6-5-6-5"/><path d="M12 19h8"/>'],
+    [/r[ée]sum[ée]|cv/i, '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h6"/>'],
+    [/chromium/i, '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'],
+    [/^files/i, '<path d="M3 6h6l2 2h10v11H3z"/>'],
+    [/music/i, '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>'],
+    [/image|background/i, '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>'],
+    [/claude/i, '<path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/>'],
+    [/code|neovim/i, '<path d="m8 8-5 4 5 4M16 8l5 4-5 4M14 5l-4 14"/>'],
+    [/obsidian/i, '<path d="M12 2 5 9l2 11 5 2 5-2 2-11z"/><path d="m12 2-2 9 2 11"/>'],
+    [/infraeye/i, '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'],
+    [/monitor/i, '<path d="M3 12h4l3-8 4 16 3-8h4"/>'],
+    [/about/i, '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'],
+    [/experience/i, '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V4h6v3"/>'],
+    [/projects/i, '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>'],
+    [/skills/i, '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>'],
+    [/contact/i, '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'],
+    [/github/i, '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-10 7"/>'],
+    [/weather/i, '<path d="M7 18a4 4 0 1 1 1-7.9A6 6 0 0 1 19 12a3 3 0 0 1-1 6z"/>'],
+    [/fetch/i, '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'],
+    [/ctf/i, '<path d="M5 21V4h11l-2 4 2 4H5"/>'],
+    [/matrix/i, '<path d="M6 4v16M12 4v10M18 4v14"/>'],
+    [/screensaver/i, '<path d="M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z"/>'],
+    [/^theme/i, '<circle cx="12" cy="12" r="9"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="11" cy="7" r="1.2"/><circle cx="16" cy="8.5" r="1.2"/><path d="M13 21c-1.5-2 0-4 2-4h3"/>'],
+    [/reboot/i, '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'],
+];
+// Anything without its own icon is an arcade game.
+const GAMEPAD_ICON = '<rect x="2" y="7" width="20" height="10" rx="5"/><path d="M7 10v4M5 12h4"/><circle cx="16" cy="11" r="1"/><circle cx="18" cy="13" r="1"/>';
+const launchIcon = (it) => ICON((LAUNCH_ICONS.find(([re]) => re.test(it.name)) || [, GAMEPAD_ICON])[1]);
+
 const LAUNCH = [
     { name: 'Terminal', hint: 'Alt+Enter' },
     { name: 'System Monitor', hint: 'htop', run: 'htop' },
@@ -487,7 +525,7 @@ function renderLauncher() {
         .sort((a, b) => (q ? b.name.toLowerCase().startsWith(q) - a.name.toLowerCase().startsWith(q) : 0));
     launcherSel = Math.min(launcherSel, Math.max(0, launcherItems.length - 1));
     launcherEl.querySelector('.launcher-list').innerHTML = launcherItems.map((it, i) => (
-        `<div class="launcher-item${i === launcherSel ? ' sel' : ''}" data-i="${i}"><span>${esc(it.name)}</span><span class="dim">${esc(it.hint || '')}</span></div>`
+        `<div class="launcher-item${i === launcherSel ? ' sel' : ''}" data-i="${i}"><span>${launchIcon(it)}${esc(it.name)}</span><span class="dim">${esc(it.hint || '')}</span></div>`
     )).join('') || '<div class="launcher-item dim">No results</div>';
     launcherEl.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
 }
@@ -561,6 +599,7 @@ function showScreensaver() {
     if (shared.booting || !saverEl.hidden) return;
     saverEl.hidden = false;
     saverShownAt = Date.now();
+    if (currentTheme() === 'yozakura') return showEnso();
     saverEl.innerHTML = '<pre></pre>';
     const pre = saverEl.querySelector('pre');
     const target = [...SAVER_ART];
@@ -572,6 +611,21 @@ function showScreensaver() {
         pre.textContent = target.map((ch, i) => (hidden.has(i) ? noise[Math.floor(Math.random() * noise.length)] : ch)).join('');
         if (!hidden.size) clearInterval(saverTimer);
     }, 40);
+}
+
+// yozakura's screensaver: an ensō brushed in one stroke, with InfraEye's motto in vertical kanji.
+function showEnso() {
+    saverEl.innerHTML = `<div class="enso">
+        <svg viewBox="0 0 400 400" aria-hidden="true">
+            <filter id="brush"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" seed="4"/><feDisplacementMap in="SourceGraphic" scale="14"/></filter>
+            <g filter="url(#brush)" fill="none" stroke-linecap="round">
+                <path class="enso-stroke" pathLength="1" d="M251 59A150 150 0 1 1 187 51" stroke-width="30"/>
+                <path class="enso-stroke dry" pathLength="1" d="M256 52A158 158 0 1 1 184 43" stroke-width="3"/>
+            </g>
+        </svg>
+        <p class="enso-jp" lang="ja">見えないものを観る</p>
+        <p class="enso-en">InfraEye, observing the unseen</p>
+    </div>`;
 }
 
 function hideScreensaver() {
@@ -587,6 +641,78 @@ for (const type of ['mousemove', 'mousedown', 'wheel', 'touchstart']) {
         else if (saverEl.hidden) resetIdle();
     }, { passive: true });
 }
+
+// ---------- yozakura petals ----------
+
+// A handful of sakura petals drift across the wallpaper, behind the windows.
+const petalsEl = document.createElement('canvas');
+petalsEl.id = 'petals';
+petalsEl.setAttribute('aria-hidden', 'true');
+document.body.prepend(petalsEl);
+const petalCtx = petalsEl.getContext('2d');
+const calmMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const PETAL_COLORS = ['#f2b8c8', '#eba6bb', '#f6cdd8', '#e48fa8'];
+let petals = [];
+
+function newPetal(anywhere) {
+    const w = innerWidth;
+    const h = innerHeight;
+    return {
+        x: anywhere ? Math.random() * w : -20 - Math.random() * w * 0.3,
+        y: anywhere ? Math.random() * h : Math.random() * h * 0.6 - 40,
+        size: 5 + Math.random() * 6,
+        vx: 0.35 + Math.random() * 0.5,
+        vy: 0.25 + Math.random() * 0.4,
+        rot: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 0.03,
+        sway: Math.random() * Math.PI * 2,
+        color: PETAL_COLORS[Math.floor(Math.random() * PETAL_COLORS.length)],
+    };
+}
+
+function drawPetal(p) {
+    petalCtx.save();
+    petalCtx.translate(p.x, p.y);
+    petalCtx.rotate(p.rot);
+    // Tumbling: squash the petal along one axis as it turns.
+    petalCtx.scale(1, Math.abs(Math.cos(p.sway)) * 0.7 + 0.3);
+    petalCtx.fillStyle = p.color;
+    petalCtx.globalAlpha = 0.75;
+    const s = p.size;
+    petalCtx.beginPath();
+    petalCtx.moveTo(0, s);
+    petalCtx.bezierCurveTo(-s, s * 0.2, -s * 0.8, -s * 0.9, -s * 0.25, -s);
+    petalCtx.lineTo(0, -s * 0.7);
+    petalCtx.lineTo(s * 0.25, -s);
+    petalCtx.bezierCurveTo(s * 0.8, -s * 0.9, s, s * 0.2, 0, s);
+    petalCtx.fill();
+    petalCtx.restore();
+}
+
+function petalFrame() {
+    const on = currentTheme() === 'yozakura' && !calmMotion.matches && !desktopEl.hidden;
+    petalsEl.hidden = !on;
+    if (on && !document.hidden) {
+        const dpr = Math.min(devicePixelRatio || 1, 2);
+        if (petalsEl.width !== Math.round(innerWidth * dpr)) {
+            petalsEl.width = Math.round(innerWidth * dpr);
+            petalsEl.height = Math.round(innerHeight * dpr);
+        }
+        if (!petals.length) petals = Array.from({ length: isMobile() ? 10 : 22 }, () => newPetal(true));
+        petalCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        petalCtx.clearRect(0, 0, innerWidth, innerHeight);
+        petals.forEach((p, i) => {
+            p.sway += 0.02;
+            p.x += p.vx + Math.sin(p.sway) * 0.4;
+            p.y += p.vy;
+            p.rot += p.spin;
+            if (p.x > innerWidth + 20 || p.y > innerHeight + 20) petals[i] = newPetal(false);
+            drawPetal(p);
+        });
+    }
+    requestAnimationFrame(petalFrame);
+}
+requestAnimationFrame(petalFrame);
 
 // ---------- keybindings (Alt stands in for Super, which the OS or browser keeps for itself) ----------
 

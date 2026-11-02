@@ -452,7 +452,7 @@ const CC_INTENTS = [
     }],
     [/xss|vulnerab|bug bounty|real (hack|exploit)|hack (this|the) (site|website)|security issue|disclos/, () => ccSay('If you found a real issue with the site itself, please report it responsibly to mnshchtri@gmail.com. The CTF on this box is the place to break things on purpose.')],
     [/nepal|kathmandu/, () => ccSay("Neox is based in Kathmandu, Nepal. It's 5h45m ahead of UTC (yes, the 45 is real), which is why the bar shows KTM time.")],
-    [/omarchy|hyprland|\barch\b/, () => ccSay("This desktop is modelled on Neox's daily driver: Arch Linux with Omarchy, a Hyprland-based setup. Same tiling, keybindings and theme (win-palette), down to the bar. `neofetch` shows the specs.")],
+    [/omarchy|hyprland|\barch\b/, () => ccSay("This desktop is modelled on Neox's daily driver: Arch Linux with Omarchy, a Hyprland-based setup. Same tiling and keybindings, down to the bar. It boots in yozakura, a night-sakura rice; `theme win-palette` brings back Neox's own colours. `neofetch` shows the specs.")],
     [/devsecops|kubernetes|security|pentest|offensive/, async () => {
         await ccSay("That's Neox's home turf: DevSecOps on bare-metal Kubernetes, with an offensive security background. If you'd rather feel it than read about it, the CTF here is built around those exact skills. Want to try it?");
         cc.offer = () => ccCtfOverview();
