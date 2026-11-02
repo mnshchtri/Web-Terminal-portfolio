@@ -1725,6 +1725,95 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
 [data-theme="yozakura"] .bar-hire { border-color: var(--shu) !important; background: color-mix(in srgb, var(--shu) 22%, transparent) !important; }
 [data-theme="yozakura"] .bar-hire:hover { background: var(--shu) !important; color: var(--fg) !important; }
 
+/* ---------- lock screen (desktop.js lockScreen) ---------- */
+
+#lock {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    display: grid;
+    place-items: center;
+    background:
+        linear-gradient(rgba(10, 12, 24, 0.55), rgba(12, 14, 30, 0.72) 50%, rgba(8, 10, 22, 0.86)),
+        #000 var(--desktop-wall, url('assets/wallpapers/yozakura.webp')) center / cover no-repeat;
+    color: var(--fg);
+    animation: lock-in 0.35s ease-out;
+}
+#lock.leaving { opacity: 0; transition: opacity 0.25s; }
+@keyframes lock-in { from { opacity: 0; } }
+
+.lock-center { display: grid; justify-items: center; text-align: center; }
+.lock-time {
+    font: 300 clamp(72px, 12vw, 132px) / 1 Georgia, 'Noto Serif', serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+.lock-date { margin: 10px 0 52px; color: var(--accent); font-size: 17px; letter-spacing: 0.08em; }
+.lock-field {
+    padding: 14px;
+    border: 1px solid rgba(236, 228, 212, 0.12);
+    border-radius: 20px;
+    background: color-mix(in srgb, var(--bg) 50%, transparent);
+    backdrop-filter: blur(14px);
+}
+.lock-field input {
+    box-sizing: border-box;
+    width: min(420px, 78vw);
+    padding: 16px 20px;
+    border: 2px solid var(--accent);
+    border-radius: 14px;
+    outline: none;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    color: var(--fg);
+    font: 17px var(--font);
+    text-align: center;
+}
+.lock-field input::placeholder { color: var(--dim); }
+.lock-user { margin: 18px 0 0; color: var(--dim); font-size: 13px; }
+
+/* The hanging scroll only belongs to yozakura. */
+.lock-scroll { display: none; }
+
+[data-theme="yozakura"] .lock-time, [data-theme="yozakura"] .lock-date { font-family: var(--kanji); }
+[data-theme="yozakura"] .lock-date { font-weight: 600; letter-spacing: 0.2em; }
+[data-theme="yozakura"] .lock-field input {
+    border: 2px solid transparent;
+    background:
+        linear-gradient(color-mix(in srgb, var(--bg) 92%, #000), color-mix(in srgb, var(--bg) 92%, #000)) padding-box,
+        linear-gradient(135deg, var(--magenta), var(--shu) 60%, var(--kin)) border-box;
+}
+[data-theme="yozakura"] .lock-scroll {
+    position: absolute;
+    top: 50%;
+    left: calc(50% + min(260px, 40vw));
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    transform: translateY(-50%);
+}
+[data-theme="yozakura"] .lock-scroll span {
+    writing-mode: vertical-rl;
+    font: 600 30px / 1 var(--kanji);
+    letter-spacing: 0.35em;
+}
+[data-theme="yozakura"] .lock-scroll b {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    background: var(--shu);
+    font: 700 18px / 1 var(--kanji);
+}
+
+@media (max-width: 700px) {
+    [data-theme="yozakura"] .lock-scroll { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    #lock { animation: none; }
+    #lock.leaving { transition: none; }
+}
+
 /* Screensaver: the ensō draws itself once, then rests. */
 [data-theme="yozakura"] #screensaver { background: radial-gradient(circle at 50% 45%, #1d2038, #0b0d18 70%); }
 .enso { display: grid; grid-template-columns: auto auto; align-items: center; gap: 0 clamp(16px, 4vw, 56px); }

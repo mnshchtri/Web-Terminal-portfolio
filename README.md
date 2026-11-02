@@ -1,5 +1,5 @@
 # Web-Terminal-portfolio
-A portfolio that behaves like my Linux desktop (Omarchy on Hyprland) — a boot sequence, then a tiling desktop with workspaces, an Omarchy-style bar, a launcher, notifications and a screensaver; inside each terminal: users and permissions, a virtual filesystem, a bash-like shell (`nsh`), full-screen TUI apps and a root challenge.
+A portfolio that behaves like my Linux desktop (Omarchy on Hyprland) — a boot sequence, then a tiling desktop with workspaces, an Omarchy-style bar, a launcher, notifications, a screensaver and a lock screen (Alt+Shift+L); inside each terminal: users and permissions, a virtual filesystem, a bash-like shell (`nsh`), full-screen TUI apps and a root challenge.
 
 https://mnshchtri.github.io/Web-Terminal-portfolio/
 
@@ -12,8 +12,8 @@ Try `cat README.md`, `ls -la`, `htop`, `vim notes.txt`, `systemctl status infra-
 - `script.js` — the shell: users (`su`/`sudo`), permissions, file commands, parsing (pipes, `>`/`>>`, `&&`/`||`/`;`, `$VARS`, globs, aliases, `!!`, scripts), tab completion, history, boot/login.
 - `apps.js` — full-screen programs: `less`/`man`, `htop`/`top`, `vim`, `nano`, `cmatrix`, `sl`.
 - `sys.js` — system and network tools (`systemctl`, `journalctl`, `ping`, `curl`, `nmap`, `ss`, `pacman`…), live GitHub (`gh`, `git clone`/`log`) and themes.
-- `desktop.js` — the desktop: dwindle tiling window manager, workspaces 1–9, top bar, launcher, notifications, screensaver, `hyprctl`/`ghostty`/`notify-send`.
-- `style.css` — layout and the colour themes. `yozakura` (night sakura: kanji workspaces, torii launcher, drifting petals, an ensō screensaver) is the default; `win-palette` is my current Omarchy theme.
+- `desktop.js` — the desktop: dwindle tiling window manager, workspaces 1–9, top bar, launcher, notifications, screensaver, lock screen, `hyprctl`/`ghostty`/`notify-send`.
+- `style.css` — layout and the colour themes. `yozakura` (night sakura: kanji workspaces, torii launcher, drifting petals, an ensō screensaver, a lock screen with a hanging-scroll motto) is the default; `win-palette` is my current Omarchy theme.
 - `gui.js` — graphical apps: Chromium, Files, Text Editor, Image Viewer (imv), Neox Music, and the background switcher.
 - `vscode.js` — VS Code: explorer, tabs, syntax highlighting, search, source control with live commits, quick open (Ctrl+P) and an integrated `nsh` terminal (Ctrl+\`). Opens this site's own source in `~/code/Web-Terminal-portfolio`.
 - `resume.js` — the résumé window, its print/PDF layout, the Hire me button and the `#resume` link. Its `RESUME` data follows my CV (without my phone number); the plain-HTML summary at the top of `index.html` is for search engines, screen readers and no-JavaScript visitors, so keep both in step.

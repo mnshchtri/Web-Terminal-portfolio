@@ -470,6 +470,7 @@ const LAUNCH_ICONS = [
     [/ctf/i, '<path d="M5 21V4h11l-2 4 2 4H5"/>'],
     [/matrix/i, '<path d="M6 4v16M12 4v10M18 4v14"/>'],
     [/screensaver/i, '<path d="M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z"/>'],
+    [/^lock/i, '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'],
     [/^theme/i, '<circle cx="12" cy="12" r="9"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="11" cy="7" r="1.2"/><circle cx="16" cy="8.5" r="1.2"/><path d="M13 21c-1.5-2 0-4 2-4h3"/>'],
     [/reboot/i, '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'],
 ];
@@ -492,6 +493,7 @@ const LAUNCH = [
     { name: 'NeoxCTF (capture the flag)', hint: 'ctf', run: 'ctf' },
     { name: 'Matrix', hint: 'cmatrix', run: 'cmatrix' },
     { name: 'Screensaver', hint: 'idle 150s', action: () => showScreensaver() },
+    { name: 'Lock Screen', hint: 'Alt+Shift+L', action: () => lockScreen() },
     ...THEMES.map((t) => ({ name: `Theme: ${t}`, hint: 'theme', action: () => cmdTheme({ args: [t] }) })),
     { name: 'Reboot', hint: 'reboot', run: 'reboot' },
 ];
@@ -642,6 +644,75 @@ for (const type of ['mousemove', 'mousedown', 'wheel', 'touchstart']) {
     }, { passive: true });
 }
 
+// ---------- lock screen ----------
+
+const calmMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+// Modelled on neox's own lock (neox.lock): the wallpaper under a night wash, a large serif clock
+// and a glass password field. In yozakura it adds the kanji date and InfraEye's motto as a
+// hanging scroll. The visitor account has no password, so Enter unlocks.
+const lockEl = document.createElement('div');
+lockEl.id = 'lock';
+lockEl.hidden = true;
+lockEl.setAttribute('role', 'dialog');
+lockEl.setAttribute('aria-label', 'Screen locked');
+document.body.appendChild(lockEl);
+let lockTimer;
+
+function renderLockClock() {
+    const now = new Date();
+    lockEl.querySelector('.lock-time').textContent = now.toTimeString().slice(0, 5);
+    lockEl.querySelector('.lock-date').textContent = currentTheme() === 'yozakura'
+        ? `${now.getMonth() + 1}月${now.getDate()}日　${'日月火水木金土'[now.getDay()]}曜日`
+        : now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function lockScreen() {
+    if (shared.booting || !lockEl.hidden) return;
+    closeLauncher();
+    lockEl.hidden = false;
+    lockEl.innerHTML = `
+        <div class="lock-center">
+            <div class="lock-time"></div>
+            <div class="lock-date"></div>
+            <form class="lock-field">
+                <input type="password" placeholder="Press Enter to unlock" aria-label="Password for ${GUEST}" autocomplete="off">
+            </form>
+            <p class="lock-user">${GUEST}@${HOST}</p>
+        </div>
+        <div class="lock-scroll" lang="ja" aria-hidden="true"><span>見えないものを観る</span><b>観</b></div>`;
+    renderLockClock();
+    lockTimer = setInterval(renderLockClock, 1000);
+    const field = lockEl.querySelector('input');
+    // Keys typed here must not also reach the terminal behind the lock.
+    field.addEventListener('keydown', (e) => e.stopPropagation());
+    lockEl.querySelector('form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        unlockScreen();
+    });
+    lockEl.addEventListener('mousedown', (e) => {
+        if (e.target !== field) {
+            e.preventDefault();
+            field.focus();
+        }
+    });
+    field.focus();
+    journal('systemd-logind', `Session 1 of user ${GUEST} locked.`);
+}
+
+function unlockScreen() {
+    clearInterval(lockTimer);
+    lockEl.classList.add('leaving');
+    setTimeout(() => {
+        lockEl.hidden = true;
+        lockEl.classList.remove('leaving');
+        lockEl.innerHTML = '';
+        if (wm.focused?.shell && !state.app) input.focus();
+        else wm.focused?.app?.focus?.();
+    }, calmMotion.matches ? 0 : 260);
+    journal('systemd-logind', `Session 1 of user ${GUEST} unlocked.`);
+}
+
 // ---------- yozakura petals ----------
 
 // A handful of sakura petals drift across the wallpaper, behind the windows.
@@ -650,7 +721,6 @@ petalsEl.id = 'petals';
 petalsEl.setAttribute('aria-hidden', 'true');
 document.body.prepend(petalsEl);
 const petalCtx = petalsEl.getContext('2d');
-const calmMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const PETAL_COLORS = ['#f2b8c8', '#eba6bb', '#f6cdd8', '#e48fa8'];
 let petals = [];
 
@@ -725,6 +795,7 @@ const KEYBINDS = [
     ['Alt+Arrows', 'Move focus'],
     ['Alt+1..9', 'Switch workspace'],
     ['Alt+Shift+1..9', 'Move window to workspace'],
+    ['Alt+Shift+L', 'Lock screen'],
 ];
 
 window.addEventListener('keydown', (e) => {
@@ -735,6 +806,15 @@ window.addEventListener('keydown', (e) => {
         return hideScreensaver();
     }
     if (shared.booting || desktopEl.hidden) return;
+    // While locked, every key belongs to the password field.
+    if (!lockEl.hidden) {
+        if (e.target !== lockEl.querySelector('input')) {
+            e.preventDefault();
+            e.stopPropagation();
+            lockEl.querySelector('input')?.focus();
+        }
+        return;
+    }
     if (!launcherEl.hidden) return launcherKey(e);
     // Super+F where the browser lets it through (⌘+F on macOS); Linux and Windows keep Super for the OS.
     if (e.metaKey && !e.altKey && !e.ctrlKey && e.code === 'KeyF') {
@@ -751,6 +831,7 @@ window.addEventListener('keydown', (e) => {
     else if (e.code === 'Space' && !e.shiftKey) openLauncher();
     else if (e.code === 'KeyW' || e.code === 'KeyQ') wm.focused && closeWindow(wm.focused);
     else if (e.code === 'KeyF') toggleFullscreen(e.shiftKey ? 'max' : 'full');
+    else if (e.code === 'KeyL' && e.shiftKey) lockScreen();
     else if (arrow) moveFocus(arrow);
     else return;
     e.preventDefault();
@@ -818,6 +899,9 @@ Object.assign(COMMANDS, {
     kitty: { group: 'Hidden', usage: 'kitty', desc: 'open a new terminal window', run: cmdTerminal },
     hyprctl: { group: 'Desktop', usage: 'hyprctl clients | workspaces | dispatch workspace N', desc: 'control the Hyprland window manager', run: cmdHyprctl },
     'notify-send': { group: 'Desktop', usage: 'notify-send SUMMARY [BODY]', desc: 'send a desktop notification', run: cmdNotifySend },
+    'omarchy-lock-screen': { group: 'Desktop', usage: 'omarchy-lock-screen', desc: 'lock the screen (Alt+Shift+L)', run: () => { lockScreen(); } },
+    hyprlock: { group: 'Hidden', usage: 'hyprlock', desc: 'lock the screen', run: () => { lockScreen(); } },
+    lock: { group: 'Hidden', usage: 'lock', desc: 'lock the screen', run: () => { lockScreen(); } },
     'omarchy-launch-screensaver': { group: 'Desktop', usage: 'omarchy-launch-screensaver', desc: 'start the screensaver now', run: () => { showScreensaver(); } },
     keybinds: { group: 'Desktop', usage: 'keybinds', desc: 'show the window manager keybindings', run: () => KEYBINDS.map(([k, v]) => `${c('y', k.padEnd(16))}${v}`) },
 });
