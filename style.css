@@ -1470,7 +1470,7 @@ html:not(.js) body { display: block; overflow: auto; background: #0a0a0a; }
     #bar { grid-template-columns: auto 1fr; gap: 10px; }
     .bar-center { display: none !important; }
     .bar-wclock, .bar-kb, .bar-cava, .bar-weather, .ws:not(.active):not(.used),
-    #bar [data-cmd="theme next"], #bar [data-cmd^="systemctl"], #bar [data-cmd="ip a"], .bar-bg, .bar-audio, .bar-clock { display: none; }
+    #bar [data-cmd="theme next"], #bar [data-cmd^="systemctl"], #bar [data-cmd="ip a"], .bar-bg, .bar-audio, .bar-clock, .bar-lock { display: none; }
     .bar-right { flex-shrink: 0; }
     .neofetch .logo { display: none; }
     .nano-keys { grid-template-columns: repeat(2, minmax(0, 1fr)); }

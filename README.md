@@ -1,5 +1,5 @@
 # Web-Terminal-portfolio
-A portfolio that behaves like my Linux desktop (Omarchy on Hyprland) — a boot sequence, then a tiling desktop with workspaces, an Omarchy-style bar, a launcher, notifications, a screensaver and a lock screen (Alt+Shift+L); inside each terminal: users and permissions, a virtual filesystem, a bash-like shell (`nsh`), full-screen TUI apps and a root challenge.
+A portfolio that behaves like my Linux desktop (Omarchy on Hyprland) — a boot sequence, then a tiling desktop with workspaces, an Omarchy-style bar, a launcher, notifications, a screensaver and a lock screen (Alt+Ctrl+L or the bar's lock icon); inside each terminal: users and permissions, a virtual filesystem, a bash-like shell (`nsh`), full-screen TUI apps and a root challenge.
 
 https://mnshchtri.github.io/Web-Terminal-portfolio/
 

@@ -329,6 +329,7 @@ const ICONS = {
     wifi: ICON('<path d="M2 8.8a15 15 0 0 1 20 0"/><path d="M5 12.6a10 10 0 0 1 14 0"/><path d="M8.5 16.3a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="1"/>'),
     volume: ICON('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>'),
     muted: ICON('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>'),
+    lock: ICON('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
     battery: (level, charging) => ICON(`<rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2"/><rect x="4" y="9" width="${Math.max(1, 13 * level)}" height="6" fill="currentColor" stroke="none"/>${charging ? '<path d="m11 8-2 4h3l-2 4" stroke="var(--bg)"/>' : ''}`),
 };
 
@@ -358,6 +359,7 @@ barEl.innerHTML = `
         <button data-cmd="ip a" title="Network">${ICONS.wifi}</button>
         <button class="bar-audio" title="Volume">${ICONS.volume}</button>
         <span class="bar-power"></span>
+        <button class="bar-lock" title="Lock screen (Alt+Ctrl+L)">${ICONS.lock}</button>
     </div>`;
 
 const $bar = (sel) => barEl.querySelector(sel);
@@ -435,6 +437,7 @@ barEl.addEventListener('click', (e) => {
     if (target.dataset.ws) return switchWorkspace(+target.dataset.ws);
     if (target.dataset.cmd) return runInTerminal(target.dataset.cmd);
     if (target.classList.contains('bar-logo')) return openLauncher();
+    if (target.classList.contains('bar-lock')) return lockScreen();
     if (target.classList.contains('bar-clock')) {
         clockAlt = !clockAlt;
         return updateBar();
@@ -493,7 +496,7 @@ const LAUNCH = [
     { name: 'NeoxCTF (capture the flag)', hint: 'ctf', run: 'ctf' },
     { name: 'Matrix', hint: 'cmatrix', run: 'cmatrix' },
     { name: 'Screensaver', hint: 'idle 150s', action: () => showScreensaver() },
-    { name: 'Lock Screen', hint: 'Alt+Shift+L', action: () => lockScreen() },
+    { name: 'Lock Screen', hint: 'Alt+Ctrl+L', action: () => lockScreen() },
     ...THEMES.map((t) => ({ name: `Theme: ${t}`, hint: 'theme', action: () => cmdTheme({ args: [t] }) })),
     { name: 'Reboot', hint: 'reboot', run: 'reboot' },
 ];
@@ -795,7 +798,7 @@ const KEYBINDS = [
     ['Alt+Arrows', 'Move focus'],
     ['Alt+1..9', 'Switch workspace'],
     ['Alt+Shift+1..9', 'Move window to workspace'],
-    ['Alt+Shift+L', 'Lock screen'],
+    ['Alt+Ctrl+L', 'Lock screen'],
 ];
 
 window.addEventListener('keydown', (e) => {
@@ -822,6 +825,12 @@ window.addEventListener('keydown', (e) => {
         e.stopPropagation();
         return toggleFullscreen(e.shiftKey ? 'max' : 'full');
     }
+    // Alt+Ctrl+L mirrors Omarchy's Super+Ctrl+L. Alt+Shift+L still works, but browser extensions often claim it.
+    if (e.altKey && (e.ctrlKey || e.shiftKey) && !e.metaKey && e.code === 'KeyL') {
+        e.preventDefault();
+        e.stopPropagation();
+        return lockScreen();
+    }
     if (!e.altKey || e.ctrlKey || e.metaKey) return;
     const digit = e.code.match(/^Digit([1-9])$/)?.[1];
     const arrow = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[e.key];
@@ -831,7 +840,6 @@ window.addEventListener('keydown', (e) => {
     else if (e.code === 'Space' && !e.shiftKey) openLauncher();
     else if (e.code === 'KeyW' || e.code === 'KeyQ') wm.focused && closeWindow(wm.focused);
     else if (e.code === 'KeyF') toggleFullscreen(e.shiftKey ? 'max' : 'full');
-    else if (e.code === 'KeyL' && e.shiftKey) lockScreen();
     else if (arrow) moveFocus(arrow);
     else return;
     e.preventDefault();
@@ -899,7 +907,7 @@ Object.assign(COMMANDS, {
     kitty: { group: 'Hidden', usage: 'kitty', desc: 'open a new terminal window', run: cmdTerminal },
     hyprctl: { group: 'Desktop', usage: 'hyprctl clients | workspaces | dispatch workspace N', desc: 'control the Hyprland window manager', run: cmdHyprctl },
     'notify-send': { group: 'Desktop', usage: 'notify-send SUMMARY [BODY]', desc: 'send a desktop notification', run: cmdNotifySend },
-    'omarchy-lock-screen': { group: 'Desktop', usage: 'omarchy-lock-screen', desc: 'lock the screen (Alt+Shift+L)', run: () => { lockScreen(); } },
+    'omarchy-lock-screen': { group: 'Desktop', usage: 'omarchy-lock-screen', desc: 'lock the screen (Alt+Ctrl+L)', run: () => { lockScreen(); } },
     hyprlock: { group: 'Hidden', usage: 'hyprlock', desc: 'lock the screen', run: () => { lockScreen(); } },
     lock: { group: 'Hidden', usage: 'lock', desc: 'lock the screen', run: () => { lockScreen(); } },
     'omarchy-launch-screensaver': { group: 'Desktop', usage: 'omarchy-launch-screensaver', desc: 'start the screensaver now', run: () => { showScreensaver(); } },
