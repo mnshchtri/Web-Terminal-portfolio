@@ -698,6 +698,25 @@ a:hover { text-decoration-style: solid; }
 
 .mpv { background: #000 !important; }
 .mpv video { flex: 1; min-height: 0; width: 100%; background: #000; object-fit: contain; outline: none; }
+.mpv-load {
+    position: absolute;
+    left: 50%;
+    bottom: 12%;
+    display: grid;
+    gap: 10px;
+    width: min(360px, 70%);
+    transform: translateX(-50%);
+    color: var(--fg);
+    font-size: 13px;
+    text-align: center;
+    text-shadow: 0 1px 4px #000;
+}
+.mpv-load::after {
+    content: '';
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent) var(--p, 0%), rgba(255, 255, 255, 0.15) var(--p, 0%));
+}
 
 .imv-stage {
     display: grid;

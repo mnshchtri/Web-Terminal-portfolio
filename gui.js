@@ -702,11 +702,40 @@ function imageApp(abs) {
 
 // ---------- mpv: the NeoxOS trailer ----------
 
-// Nothing downloads until the window opens, and closing it stops the stream.
+// Nothing downloads until the window opens. Cloudflare serves static assets without byte ranges,
+// which leaves a streamed <video> unable to seek, so the file is fetched once into a blob (with a
+// progress bar over the poster) and played from memory. Closing the window cancels the download.
 function videoApp(abs = TRAILER) {
     const node = getNode(abs);
+    const abort = new AbortController();
     let video;
     let win;
+    let blobUrl;
+
+    async function load(bar) {
+        try {
+            const res = await fetch(node.video, { signal: abort.signal });
+            if (!res.ok || !res.body) throw new Error(res.status);
+            const total = +res.headers.get('content-length') || 0;
+            const reader = res.body.getReader();
+            const chunks = [];
+            let got = 0;
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                got += value.length;
+                if (total) bar.style.setProperty('--p', `${Math.round((got / total) * 100)}%`);
+            }
+            blobUrl = URL.createObjectURL(new Blob(chunks, { type: 'video/mp4' }));
+            video.src = blobUrl;
+        } catch (e) {
+            if (abort.signal.aborted) return;
+            video.src = node.video;        // fall back to streaming: plays, just can't seek
+        }
+        bar.remove();
+        video.play().catch(() => {});
+    }
     return {
         cls: 'mpv',
         title: () => `${basename(abs)} - mpv`,
@@ -714,9 +743,10 @@ function videoApp(abs = TRAILER) {
             win = w;
             // A film wants the whole desktop: open maximised with the bar kept (Alt+Shift+F toggles it).
             win.full = 'max';
-            el.innerHTML = `<video src="${node.video}" poster="${node.poster || ''}" controls autoplay playsinline preload="metadata"
-                aria-label="NeoxOS trailer"></video>`;
+            el.innerHTML = `<video poster="${node.poster || ''}" controls playsinline aria-label="NeoxOS trailer"></video>
+                <div class="mpv-load" role="progressbar" aria-label="Loading the trailer"><span>Loading the trailer…</span></div>`;
             video = el.querySelector('video');
+            load(el.querySelector('.mpv-load'));
             el.tabIndex = 0;
             // mpv's keys: space pause, ←/→ seek 5 s, m mute, f fullscreen.
             el.addEventListener('keydown', (e) => {
@@ -737,9 +767,11 @@ function videoApp(abs = TRAILER) {
             win.el.focus({ preventScroll: true });
         },
         cleanup() {
+            abort.abort();
             video.pause();
             video.removeAttribute('src');
             video.load();
+            if (blobUrl) URL.revokeObjectURL(blobUrl);
         },
     };
 }
